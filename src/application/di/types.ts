@@ -1,0 +1,4 @@
+export const TYPES = {
+    USER_SERVICE_IMPL: Symbol.for("USER_SERVICE_IMPL"),
+    USER_REPOSITORY_IMPL: Symbol.for("USER_REPOSITORY_IMPL")
+}

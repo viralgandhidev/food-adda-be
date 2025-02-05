@@ -1,0 +1,27 @@
+import 'reflect-metadata';
+import { Container } from 'inversify';
+import { buildProviderModule } from 'inversify-binding-decorators';
+import AppRouter from '../routers/appRouter';
+import UserService from '../../infrastructure/services/user/userService';
+import UserServiceImpl from '../../infrastructure/services/user/userServiceImpl';
+import UserRepository from '../../infrastructure/respository/user/userRepository';
+import UserRepositoryImpl from '../../infrastructure/respository/user/userRepositoryImpl';
+import UserController from '../../infrastructure/controllers/user/UserController';
+import DataBaseController from '../utils/databaseController';
+import Logger from '../utils/logger';
+import ErrorHandler from '../utils/errorHandler';
+import { TYPES } from './types';
+import Middlewares from '../middlewares/middlewares';
+import JwtUtil from '../utils/jwtUtils';
+
+const container = new Container();
+container.bind(DataBaseController).to(DataBaseController).inSingletonScope();
+container.bind(AppRouter).to(AppRouter).inSingletonScope();
+container.bind(Logger).to(Logger).inSingletonScope();
+container.bind(ErrorHandler).to(ErrorHandler).inSingletonScope();
+container.bind(JwtUtil).to(JwtUtil).inSingletonScope();
+container.bind(Middlewares).to(Middlewares).inSingletonScope();
+container.bind(UserController).to(UserController).inSingletonScope();
+container.bind<UserService>(TYPES.USER_SERVICE_IMPL).to(UserServiceImpl).inSingletonScope();
+container.bind<UserRepository>(TYPES.USER_REPOSITORY_IMPL).to(UserRepositoryImpl).inSingletonScope();
+export { container };

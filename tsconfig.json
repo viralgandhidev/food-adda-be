@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "sourceMap": true,
+        "outDir": "./build",
+        "lib": [
+            "es6",
+            "dom"
+        ],
+        "types": [
+            "reflect-metadata"
+        ],
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "skipLibCheck": true,
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true
+    },
+    "include": [
+        "src/**/*"
+    ]
+}
