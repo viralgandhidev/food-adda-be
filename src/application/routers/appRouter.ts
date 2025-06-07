@@ -1,18 +1,36 @@
-import { inject, injectable } from "inversify";
-import UserController from "../../infrastructure/controllers/user/UserController";
-import { Application } from "express";
+import {Application} from 'express';
+import {inject, injectable} from 'inversify';
+import {TYPES} from '../di/types';
+import {UserController} from '../controllers/userController';
+import {CategoryController} from '../controllers/categoryController';
+import {ProductController} from '../controllers/productController';
+import {SearchController} from '../controllers/searchController';
 
 @injectable()
-class AppRouter {
-    private userController: UserController;
+export class AppRouter {
+  constructor(
+    @inject(TYPES.UserController) private userController: UserController,
+    @inject(TYPES.CategoryController)
+    private categoryController: CategoryController,
+    @inject(TYPES.ProductController)
+    private productController: ProductController,
+    @inject(TYPES.SearchController) private searchController: SearchController,
+  ) {}
 
-    constructor(@inject(UserController) userController: UserController) {
-        this.userController = userController;
-    }
+  public registerRoutes(app: Application): void {
+    // Define base API path
+    const apiRouter = '/api/v1';
 
-    public registerRoutes(app: Application) {
-        app.use('/api/users', this.userController.getRouter());
-    }
+    // Auth routes
+    app.use(`${apiRouter}/auth`, this.userController.getRouter());
+
+    // Category routes
+    app.use(`${apiRouter}/categories`, this.categoryController.getRouter());
+
+    // Product routes
+    app.use(`${apiRouter}/products`, this.productController.getRouter());
+
+    // Search routes
+    app.use(`${apiRouter}/search`, this.searchController.getRouter());
+  }
 }
-
-export default AppRouter;

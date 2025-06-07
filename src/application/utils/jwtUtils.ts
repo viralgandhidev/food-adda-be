@@ -1,23 +1,24 @@
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { UnauthorizedError } from "./appErrors";
+import {injectable} from 'inversify';
+import jwt from 'jsonwebtoken';
+import {UserType} from '../../domain/entities';
 
-class JwtUtil {
-    public signToken(data: Record<string, any>): string {
-        console.log('jwtSect', process.env.JWT_SECRET);
-        
-        const accessToken = jwt.sign(data, process.env.JWT_SECRET, {expiresIn: '24h'});
-        return accessToken;
-    }
+@injectable()
+export class JWTUtils {
+  private readonly secret: string;
 
-    public verifyToken(accessToken: string): string | JwtPayload {
-        try {
-            console.log('jwtSect', process.env.JWT_SECRET);
-            const decodedData = jwt.verify(accessToken, process.env.JWT_SECRET)
-            return decodedData;
-        } catch(error) {
-            throw new UnauthorizedError();
-        }
-    }
+  constructor() {
+    this.secret = process.env.JWT_SECRET || 'your-secret-key';
+  }
+
+  generateToken(payload: {
+    id: string;
+    email: string;
+    user_type: UserType;
+  }): string {
+    return jwt.sign(payload, this.secret, {expiresIn: '24h'});
+  }
+
+  verifyToken(token: string): any {
+    return jwt.verify(token, this.secret);
+  }
 }
-
-export default JwtUtil;

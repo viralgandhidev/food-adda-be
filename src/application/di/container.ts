@@ -1,27 +1,69 @@
 import 'reflect-metadata';
-import { Container } from 'inversify';
-import { buildProviderModule } from 'inversify-binding-decorators';
-import AppRouter from '../routers/appRouter';
-import UserService from '../../infrastructure/services/user/userService';
-import UserServiceImpl from '../../infrastructure/services/user/userServiceImpl';
-import UserRepository from '../../infrastructure/respository/user/userRepository';
-import UserRepositoryImpl from '../../infrastructure/respository/user/userRepositoryImpl';
-import UserController from '../../infrastructure/controllers/user/UserController';
-import DataBaseController from '../utils/databaseController';
-import Logger from '../utils/logger';
-import ErrorHandler from '../utils/errorHandler';
-import { TYPES } from './types';
-import Middlewares from '../middlewares/middlewares';
-import JwtUtil from '../utils/jwtUtils';
+import {Container} from 'inversify';
+import {buildProviderModule} from 'inversify-binding-decorators';
+import {TYPES} from './types';
+import {App} from '../../app';
+import {AppRouter} from '../routers/appRouter';
+import {UserController} from '../controllers/userController';
+import {UserService} from '../services/userService';
+import {UserRepository} from '../../domain/repositories/userRepository';
+import {UserRepositoryImpl} from '../../infrastructure/repositories/userRepositoryImpl';
+import {JWTUtils} from '../utils/jwtUtils';
+import {Middleware} from '../middlewares/middlewares';
+import {Logger} from '../utils/logger';
+import {DatabaseController} from '../utils/databaseController';
+import {ErrorHandler} from '../utils/errorHandler';
+import {CategoryController} from '../controllers/categoryController';
+import {CategoryRepository} from '../../domain/repositories/categoryRepository';
+import {CategoryRepositoryImpl} from '../../infrastructure/repositories/categoryRepositoryImpl';
+import {ProductController} from '../controllers/productController';
+import {ProductRepository} from '../../domain/repositories/productRepository';
+import {ProductRepositoryImpl} from '../../infrastructure/repositories/productRepositoryImpl';
+import {AuthMiddleware} from '../middleware/authenticate';
+import {SearchController} from '../controllers/searchController';
 
-const container = new Container();
-container.bind(DataBaseController).to(DataBaseController).inSingletonScope();
-container.bind(AppRouter).to(AppRouter).inSingletonScope();
-container.bind(Logger).to(Logger).inSingletonScope();
-container.bind(ErrorHandler).to(ErrorHandler).inSingletonScope();
-container.bind(JwtUtil).to(JwtUtil).inSingletonScope();
-container.bind(Middlewares).to(Middlewares).inSingletonScope();
-container.bind(UserController).to(UserController).inSingletonScope();
-container.bind<UserService>(TYPES.USER_SERVICE_IMPL).to(UserServiceImpl).inSingletonScope();
-container.bind<UserRepository>(TYPES.USER_REPOSITORY_IMPL).to(UserRepositoryImpl).inSingletonScope();
-export { container };
+const container = new Container({defaultScope: 'Singleton'});
+
+// Make sure Logger is bound first
+container.bind<Logger>(TYPES.Logger).to(Logger).inSingletonScope();
+
+// Core
+container.bind<App>(TYPES.App).to(App);
+container.bind<AppRouter>(TYPES.AppRouter).to(AppRouter);
+container
+  .bind<DatabaseController>(TYPES.DatabaseController)
+  .to(DatabaseController);
+container.bind<ErrorHandler>(TYPES.ErrorHandler).to(ErrorHandler);
+
+// Utils
+container.bind<JWTUtils>(TYPES.JWTUtils).to(JWTUtils);
+
+// Middleware
+container.bind<Middleware>(TYPES.Middleware).to(Middleware);
+
+// User Module
+container.bind<UserController>(TYPES.UserController).to(UserController);
+container.bind<UserService>(TYPES.UserService).to(UserService);
+container.bind<UserRepository>(TYPES.UserRepository).to(UserRepositoryImpl);
+
+// Category Module
+container
+  .bind<CategoryController>(TYPES.CategoryController)
+  .to(CategoryController);
+container
+  .bind<CategoryRepository>(TYPES.CategoryRepository)
+  .to(CategoryRepositoryImpl);
+
+// Product Module
+container
+  .bind<ProductController>(TYPES.ProductController)
+  .to(ProductController);
+container
+  .bind<ProductRepository>(TYPES.ProductRepository)
+  .to(ProductRepositoryImpl);
+
+container.bind<AuthMiddleware>(TYPES.AuthMiddleware).to(AuthMiddleware);
+
+container.bind<SearchController>(TYPES.SearchController).to(SearchController);
+
+export {container};

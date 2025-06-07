@@ -1,32 +1,41 @@
-import { injectable } from 'inversify';
-import { createLogger, format, Logger as WinstonLogger, transports } from 'winston'
-import { ConsoleTransportInstance } from 'winston/lib/winston/transports';
+import {injectable} from 'inversify';
+import winston from 'winston';
 
 @injectable()
-class Logger {
-    private logger: WinstonLogger;
-    private consoleTransaport: ConsoleTransportInstance;
+export class Logger {
+  private logger: winston.Logger;
 
-    constructor() {
-        const { combine, label, timestamp, printf } = format;
-        const logFormat = printf(({ level, message, label: logLabel, timestamp: logTimestamp }) => {
-            return `${logTimestamp} [${logLabel}] ${level} ${message}`;
-        });
-        this.consoleTransaport = new transports.Console()
-        this.logger = createLogger({ level: process.env.LOG_LEVEL || "info", format: combine(label({ label: process.env.NODE_ENV }), timestamp(), logFormat), transports: [this.consoleTransaport] });
-    }
+  constructor() {
+    this.logger = winston.createLogger({
+      level: 'info',
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json(),
+      ),
+      transports: [
+        new winston.transports.Console({
+          format: winston.format.combine(
+            winston.format.colorize(),
+            winston.format.simple(),
+          ),
+        }),
+      ],
+    });
+  }
 
-    public debug(message: string) {
-        this.logger.debug(message);
-    }
+  public info(message: string): void {
+    this.logger.info(message);
+  }
 
-    public info(message: string) {
-        this.logger.info(message);
-    }
+  public error(message: string, ...meta: any[]): void {
+    this.logger.error(message, ...meta);
+  }
 
-    public error(message: string, ...args) {
-        this.logger.error(message, ...args);
-    }
+  public warn(message: string): void {
+    this.logger.warn(message);
+  }
+
+  public debug(message: string): void {
+    this.logger.debug(message);
+  }
 }
-
-export default Logger;
