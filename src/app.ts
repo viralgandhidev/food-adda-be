@@ -12,15 +12,16 @@ import {inject, injectable} from 'inversify';
 import {TYPES} from './application/di/types';
 import {AppRouter} from './application/routers/appRouter';
 import {Logger} from './application/utils/logger';
-import {ErrorHandler} from './application/middleware/errorHandler';
+import {ErrorHandler} from './application/utils/errorHandler';
 import {DatabaseController} from './application/utils/databaseController';
+import path from 'path';
+import config from './application/config';
 
 import {container} from './application/di/container';
 
 @injectable()
 export class App {
   private app: express.Application;
-  private errorHandlerInstance: express.ErrorRequestHandler;
 
   constructor(
     @inject(TYPES.AppRouter) private router: AppRouter,
@@ -30,12 +31,9 @@ export class App {
     private databaseController: DatabaseController,
   ) {
     this.app = express();
-    this.errorHandlerInstance = this.errorHandler.handleError.bind(
-      this.errorHandler,
-    );
     this.initializeMiddlewares();
-    this.initializeRoutes();
     this.initializeErrorHandling();
+    this.initializeRoutes();
     this.initializeDatabase();
     this.setupGracefulShutdown();
     this.setupUncaughtErrorHandlers();
@@ -46,6 +44,8 @@ export class App {
     this.app.use(express.urlencoded({extended: true}));
     this.app.use(cors());
     this.app.use(helmet());
+    // If behind a proxy (e.g., Render/Heroku/Nginx), trust proxy for correct IP rate limiting
+    this.app.set('trust proxy', 1);
     this.app.use(
       compression({
         strategy: zlib.constants.Z_RLE,
@@ -53,14 +53,61 @@ export class App {
         memLevel: zlib.constants.Z_BEST_COMPRESSION,
       }),
     );
+    // Log API requests (method, route, status, duration) for backend API only
+    this.app.use((req, res, next) => {
+      if (req.originalUrl.startsWith(config.apiPrefix)) {
+        const startedAtMs = Date.now();
+        res.on('finish', () => {
+          const durationMs = Date.now() - startedAtMs;
+          // Keep this as a simple console log per request
+          console.log(
+            `[API] ${req.method} ${req.originalUrl} -> ${res.statusCode} ${durationMs}ms`,
+          );
+        });
+      }
+      next();
+    });
+    // Serve uploaded images statically before rate limiting
     this.app.use(
-      rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
-        standardHeaders: 'draft-8', // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
-        legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
-      }),
+      '/uploads',
+      express.static(path.join(__dirname, '../uploads')),
     );
+
+    // Rate limiting
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    // Strict limiter for auth login to protect from brute-force
+    const authLimiter = rateLimit({
+      windowMs: 60 * 1000,
+      limit: isProduction ? 10 : 100, // higher in non-prod to avoid dev friction
+      standardHeaders: 'draft-8',
+      legacyHeaders: false,
+      handler: (req, res) => {
+        res.status(429).json({
+          success: false,
+          message: 'Too many login attempts. Please try again later.',
+        });
+      },
+    });
+    // Apply only to login endpoint
+    this.app.use(`${config.apiPrefix}/auth/login`, authLimiter);
+
+    // General API limiter: enabled only in production to avoid 429s during development
+    if (isProduction) {
+      const apiLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 1000, // more generous overall API limit in production
+        standardHeaders: 'draft-8',
+        legacyHeaders: false,
+        handler: (req, res) => {
+          res.status(429).json({
+            success: false,
+            message: 'Too many requests. Please slow down and try again.',
+          });
+        },
+      });
+      this.app.use(apiLimiter);
+    }
   }
 
   private initializeRoutes(): void {
@@ -68,16 +115,8 @@ export class App {
   }
 
   private initializeErrorHandling(): void {
-    // Handle 404
-    this.app.use((req, res) => {
-      res.status(404).json({
-        success: false,
-        message: 'Route not found',
-      });
-    });
-
-    // Handle errors
-    this.app.use(this.errorHandlerInstance);
+    // Register error handler
+    this.errorHandler.registerErrorHandler(this.app);
   }
 
   private async initializeDatabase(): Promise<void> {

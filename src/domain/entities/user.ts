@@ -16,11 +16,13 @@ export interface User {
   password_hash: string;
   first_name: string;
   last_name: string;
-  phone_number?: string;
+  phone_number: string;
   user_type: UserType;
   status: UserStatus;
   profile_image_url?: string;
   address?: string;
+  company_name?: string;
+  company_description?: string;
   preferred_language?: string;
   notification_preferences?: object;
   created_at?: Date;
@@ -32,9 +34,11 @@ export interface UserSignUpDTO {
   password: string;
   first_name: string;
   last_name: string;
-  phone_number?: string;
+  phone_number: string;
   user_type: UserType;
   address?: string;
+  company_name?: string;
+  company_description?: string;
 }
 
 export interface UserLoginDTO {

@@ -9,6 +9,10 @@ import {validateRequest} from '../middleware/validateRequest';
 import {UserType} from '../../domain/entities/user';
 import {AuthMiddleware} from '../middleware/authenticate';
 import {authorize} from '../middleware/authorize';
+import multer from 'multer';
+import path from 'path';
+import type {Request as ExpressRequest} from 'express';
+import {DatabaseController} from '../utils/databaseController';
 
 @injectable()
 export class ProductController {
@@ -19,6 +23,7 @@ export class ProductController {
     private productRepository: ProductRepository,
     @inject(TYPES.Logger) private logger: Logger,
     @inject(TYPES.AuthMiddleware) private authMiddleware: AuthMiddleware,
+    @inject(TYPES.DatabaseController) private db: DatabaseController,
   ) {
     this.router = Router();
     this.initializeRoutes();
@@ -31,38 +36,184 @@ export class ProductController {
     // Public routes (still need authentication)
     this.router.get('/', asyncHandler(this.getAllProducts.bind(this)));
     this.router.get('/:id', asyncHandler(this.getProductById.bind(this)));
+    this.router.post('/:id/save', asyncHandler(this.saveProduct.bind(this)));
+    this.router.delete(
+      '/:id/save',
+      asyncHandler(this.unsaveProduct.bind(this)),
+    );
+    this.router.get('/:id/saved', asyncHandler(this.isProductSaved.bind(this)));
+    this.router.get(
+      '/saved/list/all',
+      asyncHandler(this.getSavedProducts.bind(this)),
+    );
 
     // Seller routes (need both authentication and authorization)
+    const storage = multer.diskStorage({
+      destination: function (req, file, cb) {
+        cb(null, path.join(__dirname, '../../../uploads'));
+      },
+      filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, uniqueSuffix + '-' + file.originalname);
+      },
+    });
+    const upload = multer({storage});
+
     this.router.post(
       '/',
-      authorize([UserType.SELLER]),
-      [
-        body('name').notEmpty(),
-        body('description').notEmpty(),
-        body('price').isFloat({min: 0}),
-        body('category_id').notEmpty(),
-        body('is_veg').isBoolean(),
-        body('preparation_time').isInt({min: 0}),
-        validateRequest,
-      ],
-      asyncHandler(this.createProduct.bind(this)),
+      upload.fields([
+        {name: 'image', maxCount: 1},
+        {name: 'images', maxCount: 10},
+      ]),
+      asyncHandler(async (req: Request, res: Response) => {
+        const sellerId = (req as any).user.id;
+        // Parse order array for images
+        let orderArr: number[] = [];
+        if (req.body.order) {
+          try {
+            orderArr = JSON.parse(req.body.order);
+          } catch {
+            return res
+              .status(400)
+              .json({success: false, message: 'Invalid order array'});
+          }
+        }
+        // Handle main image
+        let image_url = req.body.image_url;
+        if (
+          (req as any).files &&
+          (req as any).files['image'] &&
+          (req as any).files['image'][0]
+        ) {
+          image_url = `/uploads/${(req as any).files['image'][0].filename}`;
+        }
+        // Handle additional images
+        let images = [];
+        if ((req as any).files && (req as any).files['images']) {
+          const files = (req as any).files['images'];
+          if (orderArr.length && orderArr.length !== files.length) {
+            return res.status(400).json({
+              success: false,
+              message: 'Order array length must match number of images',
+            });
+          }
+          images = files.map((file: any, idx: number) => ({
+            image_url: `/uploads/${file.filename}`,
+            order: orderArr[idx] ?? idx,
+          }));
+        } else if (req.body.images) {
+          // Fallback for JSON body
+          try {
+            images = JSON.parse(req.body.images);
+          } catch {
+            images = req.body.images;
+          }
+        }
+        // Handle metrics
+        let metrics = [];
+        if (req.body.metrics) {
+          try {
+            metrics =
+              typeof req.body.metrics === 'string'
+                ? JSON.parse(req.body.metrics)
+                : req.body.metrics;
+          } catch {
+            metrics = req.body.metrics;
+          }
+        }
+        const productData = {
+          ...req.body,
+          image_url,
+          images,
+          metrics,
+        };
+        const product = await this.productRepository.create(
+          productData,
+          sellerId,
+        );
+        res.status(201).json({success: true, data: product});
+      }),
     );
 
     this.router.put(
       '/:id',
-      authorize([UserType.SELLER]),
-      asyncHandler(this.updateProduct.bind(this)),
+      upload.fields([
+        {name: 'image', maxCount: 1},
+        {name: 'new_images', maxCount: 10},
+      ]),
+      asyncHandler(async (req: Request, res: Response) => {
+        const sellerId = (req as any).user.id;
+        // Parse order array for images
+        let orderArr: any[] = [];
+        if (req.body.order) {
+          try {
+            orderArr = JSON.parse(req.body.order);
+          } catch {
+            return res
+              .status(400)
+              .json({success: false, message: 'Invalid order array'});
+          }
+        }
+        // Handle main image
+        let image_url = req.body.image_url;
+        if (
+          (req as any).files &&
+          (req as any).files['image'] &&
+          (req as any).files['image'][0]
+        ) {
+          image_url = `/uploads/${(req as any).files['image'][0].filename}`;
+        }
+        // Handle images: reorder, add, delete
+        let images = [];
+        const newFiles =
+          ((req as any).files && (req as any).files['new_images']) || [];
+        for (const entry of orderArr) {
+          if (entry.id) {
+            // Existing image, keep and update order
+            images.push({id: entry.id, order: entry.order});
+          } else if (
+            entry.fileIndex !== undefined &&
+            newFiles[entry.fileIndex]
+          ) {
+            // New image upload
+            images.push({
+              image_url: `/uploads/${newFiles[entry.fileIndex].filename}`,
+              order: entry.order,
+            });
+          }
+        }
+        // Handle metrics
+        let metrics = [];
+        if (req.body.metrics) {
+          try {
+            metrics =
+              typeof req.body.metrics === 'string'
+                ? JSON.parse(req.body.metrics)
+                : req.body.metrics;
+          } catch {
+            metrics = req.body.metrics;
+          }
+        }
+        const productData = {
+          ...req.body,
+          image_url,
+          images,
+          metrics,
+        };
+        const product = await this.productRepository.update(
+          req.params.id,
+          sellerId,
+          productData,
+        );
+        res.status(200).json({success: true, data: product});
+      }),
     );
 
-    this.router.delete(
-      '/:id',
-      authorize([UserType.SELLER]),
-      asyncHandler(this.deleteProduct.bind(this)),
-    );
+    this.router.delete('/:id', asyncHandler(this.deleteProduct.bind(this)));
 
+    // Allow all authenticated users to fetch their own products (returns empty if none)
     this.router.get(
       '/seller/products',
-      authorize([UserType.SELLER]),
       asyncHandler(this.getSellerProducts.bind(this)),
     );
 
@@ -72,30 +223,43 @@ export class ProductController {
       asyncHandler(this.getProductsByCategory.bind(this)),
     );
 
-    // Product image routes
-    this.router.post(
-      '/:id/images',
-      authorize([UserType.SELLER]),
-      [
-        body('images').isArray(),
-        body('images.*.image_url').isString().notEmpty(),
-        validateRequest,
-      ],
-      asyncHandler(this.addProductImages.bind(this)),
-    );
-
     this.router.delete(
       '/images/:imageId',
-      authorize([UserType.SELLER]),
       asyncHandler(this.deleteProductImage.bind(this)),
     );
   }
 
   private async getAllProducts(req: Request, res: Response): Promise<void> {
-    const products = await this.productRepository.findAll();
+    // Parse filters from query params
+    const filters = {
+      query: req.query.q as string,
+      categoryId: req.query.categoryId as string,
+      minPrice: req.query.minPrice
+        ? parseFloat(req.query.minPrice as string)
+        : undefined,
+      maxPrice: req.query.maxPrice
+        ? parseFloat(req.query.maxPrice as string)
+        : undefined,
+      isVeg:
+        req.query.isVeg !== undefined ? req.query.isVeg === 'true' : undefined,
+      sortBy: req.query.sortBy as 'price' | 'name' | 'preparation_time',
+      sortOrder: req.query.sortOrder as 'asc' | 'desc',
+      page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
+      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 20,
+    };
+
+    // Use new repository method for search+filter+pagination
+    const result = await this.productRepository.findWithFilters(filters);
+
     res.status(200).json({
       success: true,
-      data: products,
+      data: result.items,
+      meta: {
+        total: result.total,
+        page: filters.page,
+        limit: filters.limit,
+        totalPages: Math.ceil(result.total / (filters.limit || 20)),
+      },
     });
   }
 
@@ -108,32 +272,106 @@ export class ProductController {
       });
       return;
     }
+    // Record a product view (fire-and-forget)
+    try {
+      const viewerId = (req as any).user?.id as string | undefined;
+      if (viewerId && product.seller_id !== viewerId) {
+        const connection = await this.db.getConnection();
+        try {
+          await connection.execute(
+            'INSERT IGNORE INTO product_views (product_id, viewer_id, view_date) VALUES (?, ?, CURRENT_DATE)',
+            [req.params.id, viewerId],
+          );
+        } finally {
+          connection.release();
+        }
+      }
+    } catch (err) {
+      this.logger.error('Error recording product view', err);
+      // Do not block response
+    }
     res.status(200).json({
       success: true,
       data: product,
     });
   }
 
-  private async createProduct(req: Request, res: Response): Promise<void> {
-    const sellerId = (req as any).user.id;
-    const product = await this.productRepository.create(req.body, sellerId);
-    res.status(201).json({
-      success: true,
-      data: product,
-    });
+  private async saveProduct(req: Request, res: Response): Promise<void> {
+    const userId = (req as any).user?.id as string;
+    const productId = req.params.id;
+    const connection = await this.db.getConnection();
+    try {
+      await connection.execute(
+        'INSERT IGNORE INTO saved_products (user_id, product_id) VALUES (?, ?)',
+        [userId, productId],
+      );
+      res.status(204).send();
+    } finally {
+      connection.release();
+    }
   }
 
-  private async updateProduct(req: Request, res: Response): Promise<void> {
-    const sellerId = (req as any).user.id;
-    const product = await this.productRepository.update(
-      req.params.id,
-      sellerId,
-      req.body,
-    );
-    res.status(200).json({
-      success: true,
-      data: product,
-    });
+  private async unsaveProduct(req: Request, res: Response): Promise<void> {
+    const userId = (req as any).user?.id as string;
+    const productId = req.params.id;
+    const connection = await this.db.getConnection();
+    try {
+      await connection.execute(
+        'DELETE FROM saved_products WHERE user_id = ? AND product_id = ?',
+        [userId, productId],
+      );
+      res.status(204).send();
+    } finally {
+      connection.release();
+    }
+  }
+
+  private async isProductSaved(req: Request, res: Response): Promise<void> {
+    const userId = (req as any).user?.id as string;
+    const productId = req.params.id;
+    const connection = await this.db.getConnection();
+    try {
+      const [rows] = await connection.execute(
+        'SELECT 1 FROM saved_products WHERE user_id = ? AND product_id = ? LIMIT 1',
+        [userId, productId],
+      );
+      const saved = (rows as any[]).length > 0;
+      res.json({success: true, data: {saved}});
+    } finally {
+      connection.release();
+    }
+  }
+
+  private async getSavedProducts(req: Request, res: Response): Promise<void> {
+    const userId = (req as any).user?.id as string;
+    const connection = await this.db.getConnection();
+    try {
+      const [rows] = await connection.execute(
+        `SELECT p.*, c.name as category_name,
+                u.first_name as seller_first_name, u.last_name as seller_last_name
+         FROM saved_products sp
+         JOIN products p ON sp.product_id = p.id
+         LEFT JOIN categories c ON p.category_id = c.id
+         LEFT JOIN users u ON p.seller_id = u.id
+         WHERE sp.user_id = ?
+         ORDER BY sp.saved_at DESC`,
+        [userId],
+      );
+      const products = rows as any[];
+      for (const product of products) {
+        product.images = await this.productRepository.getProductImages(
+          product.id,
+        );
+        product.brand = (
+          (product.seller_first_name || '') +
+          ' ' +
+          (product.seller_last_name || '')
+        ).trim();
+      }
+      res.json({success: true, data: products});
+    } finally {
+      connection.release();
+    }
   }
 
   private async deleteProduct(req: Request, res: Response): Promise<void> {
@@ -164,20 +402,6 @@ export class ProductController {
       meta: {
         total: products.length,
       },
-    });
-  }
-
-  private async addProductImages(req: Request, res: Response): Promise<void> {
-    const sellerId = (req as any).user.id;
-    const productId = req.params.id;
-    const images = await this.productRepository.addProductImages(
-      productId,
-      req.body.images,
-    );
-
-    res.status(201).json({
-      success: true,
-      data: images,
     });
   }
 

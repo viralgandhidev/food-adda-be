@@ -35,4 +35,7 @@ export const TYPES = {
   AuthMiddleware: Symbol.for('AuthMiddleware'),
 
   SearchController: Symbol.for('SearchController'),
+
+  SupplierController: Symbol.for('SupplierController'),
+  FormController: Symbol.for('FormController'),
 };

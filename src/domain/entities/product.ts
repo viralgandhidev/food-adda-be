@@ -1,5 +1,12 @@
 import {CreateProductImageDTO, ProductImage} from './productImage';
 
+export interface ProductMetric {
+  id: string;
+  product_id: string;
+  key: string;
+  value: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -17,6 +24,8 @@ export interface Product {
   seller_first_name?: string;
   seller_last_name?: string;
   images?: ProductImage[];
+  brand?: string;
+  metrics?: ProductMetric[];
 }
 
 export interface CreateProductDTO {
@@ -28,8 +37,10 @@ export interface CreateProductDTO {
   is_veg: boolean;
   preparation_time: number;
   images?: CreateProductImageDTO[];
+  metrics?: {key: string; value: string}[];
 }
 
 export interface UpdateProductDTO extends Partial<CreateProductDTO> {
   is_available?: boolean;
+  metrics?: {key: string; value: string}[];
 }

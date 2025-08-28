@@ -5,7 +5,7 @@ import {SearchFilters, SearchResult} from '../entities/search';
 export interface ProductRepository {
   create(product: CreateProductDTO, sellerId: string): Promise<Product>;
   findById(id: string): Promise<Product | null>;
-  findAll(): Promise<Product[]>;
+  findAll(limit?: number, offset?: number): Promise<Product[]>;
   findBySeller(sellerId: string): Promise<Product[]>;
   update(
     id: string,
@@ -24,4 +24,11 @@ export interface ProductRepository {
   getProductImages(productId: string): Promise<ProductImage[]>;
 
   search(filters: SearchFilters): Promise<SearchResult>;
+
+  findLatest(limit?: number): Promise<Product[]>;
+  getTotalCount(): Promise<number>;
+
+  findWithFilters(
+    filters: SearchFilters,
+  ): Promise<{items: Product[]; total: number}>;
 }

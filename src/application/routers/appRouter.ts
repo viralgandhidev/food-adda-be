@@ -5,6 +5,8 @@ import {UserController} from '../controllers/userController';
 import {CategoryController} from '../controllers/categoryController';
 import {ProductController} from '../controllers/productController';
 import {SearchController} from '../controllers/searchController';
+import {SupplierController} from '../controllers/supplierController';
+import {FormController} from '../controllers/formController';
 
 @injectable()
 export class AppRouter {
@@ -15,6 +17,10 @@ export class AppRouter {
     @inject(TYPES.ProductController)
     private productController: ProductController,
     @inject(TYPES.SearchController) private searchController: SearchController,
+    @inject(TYPES.SupplierController)
+    private supplierController: SupplierController,
+    @inject(TYPES.FormController)
+    private formController: FormController,
   ) {}
 
   public registerRoutes(app: Application): void {
@@ -32,5 +38,11 @@ export class AppRouter {
 
     // Search routes
     app.use(`${apiRouter}/search`, this.searchController.getRouter());
+
+    // Supplier routes
+    app.use(`${apiRouter}/suppliers`, this.supplierController.getRouter());
+
+    // Forms routes (public)
+    app.use(`${apiRouter}/forms`, this.formController.getRouter());
   }
 }

@@ -6,6 +6,8 @@ export interface SearchFilters {
   isVeg?: boolean;
   sortBy?: 'price' | 'name' | 'preparation_time';
   sortOrder?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
 }
 
 export interface SearchResult {

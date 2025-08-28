@@ -23,17 +23,22 @@ export class UserRepositoryImpl implements UserRepository {
 
       const [result] = await connection.execute(
         `INSERT INTO users (
-                    email, password_hash, first_name, last_name, 
-                    user_type, status, preferred_language,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          email, password_hash, first_name, last_name, 
+          phone_number, user_type, status, address,
+          company_name, company_description,
+          preferred_language, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
         [
           user.email,
           passwordHash,
           user.first_name,
           user.last_name,
+          user.phone_number,
           user.user_type,
           UserStatus.ACTIVE,
+          user.address || null,
+          user.company_name || null,
+          user.company_description || null,
           'English',
         ],
       );
@@ -104,6 +109,39 @@ export class UserRepositoryImpl implements UserRepository {
       );
     } catch (error) {
       this.logger.error('Error updating last login:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async updateProfile(
+    userId: string,
+    updateData: Partial<User>,
+  ): Promise<User> {
+    const connection = await this.db.getConnection();
+    try {
+      // Build dynamic SQL for only provided fields
+      const fields = Object.keys(updateData).filter(
+        key => updateData[key] !== undefined,
+      );
+      if (fields.length === 0) {
+        throw new Error('No fields to update');
+      }
+      const setClause = fields.map(field => `${field} = ?`).join(', ');
+      const values = fields.map(field => updateData[field]);
+      values.push(userId);
+      await connection.execute(
+        `UPDATE users SET ${setClause}, updated_at = NOW() WHERE id = ?`,
+        values,
+      );
+      const [rows] = await connection.execute(
+        'SELECT * FROM users WHERE id = ?',
+        [userId],
+      );
+      return (rows as any)[0];
+    } catch (error) {
+      this.logger.error('Error updating user profile:', error);
       throw error;
     } finally {
       connection.release();

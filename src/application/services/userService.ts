@@ -63,6 +63,7 @@ export class UserService {
     // Find user
     const user = await this.userRepository.findByEmail(credentials.email);
     if (!user) {
+      this.logger.error('User not found');
       throw new AppError('Invalid email or password', 401);
     }
 
@@ -91,5 +92,22 @@ export class UserService {
     });
 
     return {user, token};
+  }
+
+  public async updateProfile(
+    userId: string,
+    updateData: Partial<User>,
+  ): Promise<User> {
+    try {
+      const updatedUser = await this.userRepository.updateProfile(
+        userId,
+        updateData,
+      );
+      this.logger.info(`User profile updated: ${userId}`);
+      return updatedUser;
+    } catch (error) {
+      this.logger.error('Error in updateProfile:', error);
+      throw error;
+    }
   }
 }

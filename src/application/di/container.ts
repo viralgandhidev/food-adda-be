@@ -21,6 +21,8 @@ import {ProductRepository} from '../../domain/repositories/productRepository';
 import {ProductRepositoryImpl} from '../../infrastructure/repositories/productRepositoryImpl';
 import {AuthMiddleware} from '../middleware/authenticate';
 import {SearchController} from '../controllers/searchController';
+import {SupplierController} from '../controllers/supplierController';
+import {FormController} from '../controllers/formController';
 
 const container = new Container({defaultScope: 'Singleton'});
 
@@ -28,42 +30,78 @@ const container = new Container({defaultScope: 'Singleton'});
 container.bind<Logger>(TYPES.Logger).to(Logger).inSingletonScope();
 
 // Core
-container.bind<App>(TYPES.App).to(App);
-container.bind<AppRouter>(TYPES.AppRouter).to(AppRouter);
+container.bind<App>(TYPES.App).to(App).inSingletonScope();
+container.bind<AppRouter>(TYPES.AppRouter).to(AppRouter).inSingletonScope();
 container
   .bind<DatabaseController>(TYPES.DatabaseController)
-  .to(DatabaseController);
-container.bind<ErrorHandler>(TYPES.ErrorHandler).to(ErrorHandler);
+  .to(DatabaseController)
+  .inSingletonScope();
+container
+  .bind<ErrorHandler>(TYPES.ErrorHandler)
+  .to(ErrorHandler)
+  .inSingletonScope();
 
 // Utils
-container.bind<JWTUtils>(TYPES.JWTUtils).to(JWTUtils);
+container.bind<JWTUtils>(TYPES.JWTUtils).to(JWTUtils).inSingletonScope();
 
 // Middleware
-container.bind<Middleware>(TYPES.Middleware).to(Middleware);
+container.bind<Middleware>(TYPES.Middleware).to(Middleware).inSingletonScope();
+container
+  .bind<AuthMiddleware>(TYPES.AuthMiddleware)
+  .to(AuthMiddleware)
+  .inSingletonScope();
+container.bind(AuthMiddleware).toSelf().inSingletonScope();
 
 // User Module
-container.bind<UserController>(TYPES.UserController).to(UserController);
-container.bind<UserService>(TYPES.UserService).to(UserService);
-container.bind<UserRepository>(TYPES.UserRepository).to(UserRepositoryImpl);
+container
+  .bind<UserController>(TYPES.UserController)
+  .to(UserController)
+  .inSingletonScope();
+container
+  .bind<UserService>(TYPES.UserService)
+  .to(UserService)
+  .inSingletonScope();
+container
+  .bind<UserRepository>(TYPES.UserRepository)
+  .to(UserRepositoryImpl)
+  .inSingletonScope();
 
 // Category Module
 container
   .bind<CategoryController>(TYPES.CategoryController)
-  .to(CategoryController);
+  .to(CategoryController)
+  .inSingletonScope();
 container
   .bind<CategoryRepository>(TYPES.CategoryRepository)
-  .to(CategoryRepositoryImpl);
+  .to(CategoryRepositoryImpl)
+  .inSingletonScope();
 
 // Product Module
 container
   .bind<ProductController>(TYPES.ProductController)
-  .to(ProductController);
+  .to(ProductController)
+  .inSingletonScope();
 container
   .bind<ProductRepository>(TYPES.ProductRepository)
-  .to(ProductRepositoryImpl);
+  .to(ProductRepositoryImpl)
+  .inSingletonScope();
 
-container.bind<AuthMiddleware>(TYPES.AuthMiddleware).to(AuthMiddleware);
+// Search Module
+container
+  .bind<SearchController>(TYPES.SearchController)
+  .to(SearchController)
+  .inSingletonScope();
 
-container.bind<SearchController>(TYPES.SearchController).to(SearchController);
+// Supplier Module
+container
+  .bind<SupplierController>(TYPES.SupplierController)
+  .to(SupplierController)
+  .inSingletonScope();
+
+// Form Module
+container
+  .bind<FormController>(TYPES.FormController)
+  .to(FormController)
+  .inSingletonScope();
 
 export {container};

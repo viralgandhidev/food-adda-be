@@ -31,6 +31,8 @@ export class SearchController {
         query('isVeg').optional().isBoolean(),
         query('sortBy').optional().isIn(['price', 'name', 'preparation_time']),
         query('sortOrder').optional().isIn(['asc', 'desc']),
+        query('page').optional().isInt({min: 1}),
+        query('limit').optional().isInt({min: 1, max: 100}),
         validateRequest,
       ],
       asyncHandler(this.search.bind(this)),
@@ -50,13 +52,22 @@ export class SearchController {
       isVeg: req.query.isVeg ? req.query.isVeg === 'true' : undefined,
       sortBy: req.query.sortBy as 'price' | 'name' | 'preparation_time',
       sortOrder: req.query.sortOrder as 'asc' | 'desc',
+      page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
+      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 20,
     };
 
     const results = await this.productRepository.search(filters);
 
     res.status(200).json({
       success: true,
-      data: results,
+      data: results.products.items,
+      meta: {
+        total: results.products.total,
+        page: filters.page,
+        limit: filters.limit,
+        totalPages: Math.ceil(results.products.total / filters.limit),
+      },
+      categories: results.categories,
     });
   }
 
