@@ -26,24 +26,26 @@ export class SupplierController {
   }
 
   private initializeRoutes(): void {
-    // All routes require authentication
-    this.router.use(this.authMiddleware.authenticate);
-
-    // Public routes (still need authentication)
+    // Public supplier endpoints
     this.router.get(
       '/:supplierId',
+      this.authMiddleware.optionalAuthenticate,
       asyncHandler(this.getSupplierDetails.bind(this)),
     );
+    // Authenticated actions
     this.router.post(
       '/:supplierId/save',
+      this.authMiddleware.authenticate,
       asyncHandler(this.saveSupplier.bind(this)),
     );
     this.router.delete(
       '/:supplierId/save',
+      this.authMiddleware.authenticate,
       asyncHandler(this.unsaveSupplier.bind(this)),
     );
     this.router.get(
       '/saved/list/all',
+      this.authMiddleware.authenticate,
       asyncHandler(async (req, res) => {
         const userId = (req as any).user?.id as string;
         const connection = await this.db.getConnection();
@@ -64,6 +66,7 @@ export class SupplierController {
     );
     this.router.get(
       '/:supplierId/saved',
+      this.authMiddleware.authenticate,
       asyncHandler(async (req, res) => {
         const userId = (req as any).user?.id as string;
         const supplierId = req.params.supplierId;
@@ -82,10 +85,13 @@ export class SupplierController {
     );
     this.router.get(
       '/:supplierId/metrics',
+      // Keep public, metrics don't require auth
       asyncHandler(this.getSupplierMetrics.bind(this)),
     );
     this.router.get(
       '/:supplierId/products',
+      this.authMiddleware.optionalAuthenticate,
+      // Public products for supplier
       asyncHandler(this.getSupplierProducts.bind(this)),
     );
   }
@@ -117,7 +123,13 @@ export class SupplierController {
       // Do not block response on analytics failure
     }
     // Exclude password_hash from response
-    const {password_hash, ...supplierData} = user;
+    const {password_hash, ...supplierData} = user as any;
+    const isAuthed = Boolean((req as any).user?.id);
+    if (!isAuthed) {
+      // mask contact details for unauthenticated users
+      (supplierData as any).email = null;
+      (supplierData as any).phone_number = null;
+    }
     res.json({success: true, data: supplierData});
   }
 
@@ -132,7 +144,11 @@ export class SupplierController {
       return;
     }
     const products = await this.productRepository.findBySeller(supplierId);
-    res.json({success: true, data: products});
+    const isAuthed = Boolean((req as any).user?.id);
+    const sanitized = isAuthed
+      ? products
+      : (products as any[]).map(p => ({...p, price: null}));
+    res.json({success: true, data: sanitized});
   }
 
   private async saveSupplier(req: Request, res: Response): Promise<void> {

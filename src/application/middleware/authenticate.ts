@@ -37,4 +37,34 @@ export class AuthMiddleware {
       next(error);
     }
   };
+
+  // Optional auth: set req.user if a valid token is present; do not error if missing/invalid
+  public optionalAuthenticate = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return next();
+      }
+
+      const token = authHeader.split(' ')[1];
+      if (!token) {
+        return next();
+      }
+
+      try {
+        const decoded = jwt.verify(token, config.jwtSecret) as any;
+        (req as any).user = decoded;
+      } catch (error) {
+        // ignore invalid tokens for optional auth
+      }
+      next();
+    } catch (error) {
+      // never block for optional auth
+      next();
+    }
+  };
 }

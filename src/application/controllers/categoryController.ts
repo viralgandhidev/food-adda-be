@@ -21,11 +21,8 @@ export class CategoryController {
   }
 
   private initializeRoutes(): void {
-    this.router.get(
-      '/',
-      this.authMiddleware.authenticate,
-      asyncHandler(this.getCategories.bind(this)),
-    );
+    // Make categories list public
+    this.router.get('/', asyncHandler(this.getCategories.bind(this)));
   }
 
   private async getCategories(req: Request, res: Response): Promise<void> {

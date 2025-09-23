@@ -30,12 +30,24 @@ export class ProductController {
   }
 
   private initializeRoutes(): void {
-    // All routes require authentication
-    this.router.use(this.authMiddleware.authenticate);
-
-    // Public routes (still need authentication)
-    this.router.get('/', asyncHandler(this.getAllProducts.bind(this)));
-    this.router.get('/:id', asyncHandler(this.getProductById.bind(this)));
+    // Public routes (no authentication required)
+    // Attach optional auth so we can tailor responses
+    this.router.get(
+      '/',
+      this.authMiddleware.optionalAuthenticate,
+      asyncHandler(this.getAllProducts.bind(this)),
+    );
+    // Register static route BEFORE param route to avoid shadowing
+    this.router.get(
+      '/top-viewed',
+      this.authMiddleware.optionalAuthenticate,
+      asyncHandler(this.getTopViewedProducts.bind(this)),
+    );
+    this.router.get(
+      '/:id',
+      this.authMiddleware.optionalAuthenticate,
+      asyncHandler(this.getProductById.bind(this)),
+    );
     this.router.post('/:id/save', asyncHandler(this.saveProduct.bind(this)));
     this.router.delete(
       '/:id/save',
@@ -61,6 +73,7 @@ export class ProductController {
 
     this.router.post(
       '/',
+      this.authMiddleware.authenticate,
       upload.fields([
         {name: 'image', maxCount: 1},
         {name: 'images', maxCount: 10},
@@ -137,6 +150,7 @@ export class ProductController {
 
     this.router.put(
       '/:id',
+      this.authMiddleware.authenticate,
       upload.fields([
         {name: 'image', maxCount: 1},
         {name: 'new_images', maxCount: 10},
@@ -209,22 +223,29 @@ export class ProductController {
       }),
     );
 
-    this.router.delete('/:id', asyncHandler(this.deleteProduct.bind(this)));
+    this.router.delete(
+      '/:id',
+      this.authMiddleware.authenticate,
+      asyncHandler(this.deleteProduct.bind(this)),
+    );
 
     // Allow all authenticated users to fetch their own products (returns empty if none)
     this.router.get(
       '/seller/products',
+      this.authMiddleware.authenticate,
       asyncHandler(this.getSellerProducts.bind(this)),
     );
 
     // Add this new route
     this.router.get(
       '/category/:categoryId',
+      // public
       asyncHandler(this.getProductsByCategory.bind(this)),
     );
 
     this.router.delete(
       '/images/:imageId',
+      this.authMiddleware.authenticate,
       asyncHandler(this.deleteProductImage.bind(this)),
     );
   }
@@ -250,10 +271,18 @@ export class ProductController {
 
     // Use new repository method for search+filter+pagination
     const result = await this.productRepository.findWithFilters(filters);
+    const isAuthed = Boolean((req as any).user?.id);
+
+    const sanitized = result.items.map(p => {
+      if (isAuthed) return p;
+      // mask price for unauthenticated users
+      const {price, ...rest} = p as any;
+      return {...rest, price: null};
+    });
 
     res.status(200).json({
       success: true,
-      data: result.items,
+      data: sanitized,
       meta: {
         total: result.total,
         page: filters.page,
@@ -272,6 +301,9 @@ export class ProductController {
       });
       return;
     }
+    // mask sensitive fields for unauthenticated users
+    const isAuthed = Boolean((req as any).user?.id);
+    const masked = !isAuthed ? ({...product, price: null} as any) : product;
     // Record a product view (fire-and-forget)
     try {
       const viewerId = (req as any).user?.id as string | undefined;
@@ -292,8 +324,57 @@ export class ProductController {
     }
     res.status(200).json({
       success: true,
-      data: product,
+      data: masked,
     });
+  }
+
+  private async getTopViewedProducts(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    const limit = req.query.limit
+      ? parseInt(req.query.limit as string, 10)
+      : 20;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.max(1, Math.min(limit, 100))
+      : 20;
+    const isAuthed = Boolean((req as any).user?.id);
+    const connection = await this.db.getConnection();
+    try {
+      const [rows] = await connection.execute(
+        `SELECT p.*, c.name as category_name,
+                u.first_name as seller_first_name, u.last_name as seller_last_name,
+                COALESCE(cnt.views, 0) as views
+         FROM products p
+         LEFT JOIN (
+           SELECT product_id, COUNT(*) as views
+           FROM product_views
+           GROUP BY product_id
+         ) cnt ON cnt.product_id = p.id
+         LEFT JOIN categories c ON p.category_id = c.id
+         LEFT JOIN users u ON p.seller_id = u.id
+         ORDER BY views DESC, p.updated_at DESC
+         LIMIT ${safeLimit}`,
+      );
+      const products = rows as any[];
+      // attach images
+      for (const product of products) {
+        product.images = await this.productRepository.getProductImages(
+          product.id,
+        );
+        product.brand = (
+          (product.seller_first_name || '') +
+          ' ' +
+          (product.seller_last_name || '')
+        ).trim();
+        if (!isAuthed) {
+          product.price = null;
+        }
+      }
+      res.json({success: true, data: products});
+    } finally {
+      connection.release();
+    }
   }
 
   private async saveProduct(req: Request, res: Response): Promise<void> {
