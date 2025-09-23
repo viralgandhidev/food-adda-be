@@ -1,4 +1,12 @@
-import {MigrationInterface, QueryRunner} from 'typeorm';
+// Lightweight migration runner without TypeORM
+export interface QueryRunner {
+  query: (sql: string) => Promise<any>;
+}
+
+export interface MigrationInterface {
+  up(queryRunner: QueryRunner): Promise<void>;
+  down(queryRunner: QueryRunner): Promise<void>;
+}
 
 export class AddFullTextIndexes implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
