@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build || echo "skip build if not configured"
+RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /app
