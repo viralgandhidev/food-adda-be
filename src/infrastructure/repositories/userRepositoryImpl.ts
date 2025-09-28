@@ -34,7 +34,7 @@ export class UserRepositoryImpl implements UserRepository {
           user.first_name,
           user.last_name,
           user.phone_number,
-          user.user_type,
+          user.user_type || 'CONSUMER',
           UserStatus.ACTIVE,
           user.address || null,
           user.company_name || null,

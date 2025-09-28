@@ -38,7 +38,7 @@ export class UserController {
         body('first_name').notEmpty(),
         body('last_name').notEmpty(),
         body('phone_number').notEmpty().isMobilePhone('any'),
-        body('user_type').isIn(['CONSUMER', 'SELLER']),
+        body('user_type').optional().isIn(['CONSUMER', 'SELLER']),
         body('address').optional(),
         body('company_name')
           .optional()

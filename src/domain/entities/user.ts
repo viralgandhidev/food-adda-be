@@ -17,7 +17,7 @@ export interface User {
   first_name: string;
   last_name: string;
   phone_number: string;
-  user_type: UserType;
+  user_type?: UserType;
   status: UserStatus;
   profile_image_url?: string;
   address?: string;
@@ -35,7 +35,7 @@ export interface UserSignUpDTO {
   first_name: string;
   last_name: string;
   phone_number: string;
-  user_type: UserType;
+  user_type?: UserType;
   address?: string;
   company_name?: string;
   company_description?: string;
