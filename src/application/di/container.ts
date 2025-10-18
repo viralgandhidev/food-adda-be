@@ -23,6 +23,9 @@ import {AuthMiddleware} from '../middleware/authenticate';
 import {SearchController} from '../controllers/searchController';
 import {SupplierController} from '../controllers/supplierController';
 import {FormController} from '../controllers/formController';
+import {KeywordController} from '../controllers/keywordController';
+import {KeywordRepository} from '../../domain/repositories/keywordRepository';
+import {KeywordRepositoryImpl} from '../../infrastructure/repositories/keywordRepositoryImpl';
 
 const container = new Container({defaultScope: 'Singleton'});
 
@@ -90,6 +93,16 @@ container
 container
   .bind<SearchController>(TYPES.SearchController)
   .to(SearchController)
+  .inSingletonScope();
+
+// Keywords Module
+container
+  .bind<KeywordController>(TYPES.KeywordController)
+  .to(KeywordController)
+  .inSingletonScope();
+container
+  .bind<KeywordRepository>(TYPES.KeywordRepository)
+  .to(KeywordRepositoryImpl)
   .inSingletonScope();
 
 // Supplier Module

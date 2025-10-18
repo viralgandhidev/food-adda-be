@@ -43,6 +43,14 @@ export class SearchController {
     const filters = {
       query: req.query.q as string,
       categoryId: req.query.categoryId as string,
+      mainCategoryId: req.query.mainCategoryId as string,
+      subCategoryId: req.query.subCategoryId as string,
+      keywordId: req.query.keywordId as string,
+      keywordIds: req.query.keywordIds
+        ? Array.isArray(req.query.keywordIds)
+          ? (req.query.keywordIds as string[])
+          : String(req.query.keywordIds).split(',').filter(Boolean)
+        : undefined,
       minPrice: req.query.minPrice
         ? parseFloat(req.query.minPrice as string)
         : undefined,

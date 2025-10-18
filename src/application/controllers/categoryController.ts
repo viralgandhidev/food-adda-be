@@ -23,6 +23,7 @@ export class CategoryController {
   private initializeRoutes(): void {
     // Make categories list public
     this.router.get('/', asyncHandler(this.getCategories.bind(this)));
+    this.router.get('/tree', asyncHandler(this.getCategoryTree.bind(this)));
   }
 
   private async getCategories(req: Request, res: Response): Promise<void> {
@@ -45,6 +46,23 @@ export class CategoryController {
           0,
         ),
       },
+    });
+  }
+
+  private async getCategoryTree(req: Request, res: Response): Promise<void> {
+    const tree = await this.categoryRepository.findTree();
+    const normalize = (node: any) => ({
+      ...node,
+      product_count: parseInt(node.product_count?.toString() || '0'),
+      is_featured: Boolean(node.is_featured),
+      is_active: Boolean(node.is_active),
+      children: (node.children || []).map((c: any) => normalize(c)),
+    });
+    const formatted = tree.map(normalize);
+    res.status(200).json({
+      success: true,
+      data: formatted,
+      meta: {total_roots: formatted.length},
     });
   }
 

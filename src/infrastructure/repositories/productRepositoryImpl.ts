@@ -37,22 +37,69 @@ export class ProductRepositoryImpl implements ProductRepository {
       // Helper to ensure no undefined values
       const safe = (v: any) => (v === undefined ? null : v);
 
+      // Resolve legacy categories.id for FK using names from main/sub
+      let effectiveCategoryId: string | null = safe(
+        product.sub_category_id ??
+          product.main_category_id ??
+          product.category_id,
+      ) as string | null;
+      try {
+        if (product.sub_category_id) {
+          const [rows] = await connection.execute(
+            `SELECT c.id
+             FROM sub_categories sc
+             JOIN categories c ON c.name = sc.name
+             WHERE sc.id = ?
+             LIMIT 1`,
+            [product.sub_category_id],
+          );
+          const arr = rows as Array<{id: string}>;
+          if (arr.length) effectiveCategoryId = arr[0].id;
+        }
+        if (!effectiveCategoryId && product.main_category_id) {
+          const [rows2] = await connection.execute(
+            `SELECT c.id
+             FROM main_categories mc
+             JOIN categories c ON c.name = mc.name
+             WHERE mc.id = ?
+             LIMIT 1`,
+            [product.main_category_id],
+          );
+          const arr2 = rows2 as Array<{id: string}>;
+          if (arr2.length) effectiveCategoryId = arr2[0].id;
+        }
+      } catch (resolveErr) {
+        // fall through, will use provided category_id
+      }
+      if (!effectiveCategoryId && product.category_id) {
+        // trust legacy id if provided
+        effectiveCategoryId = product.category_id as unknown as string;
+      }
+      if (!effectiveCategoryId) {
+        throw new Error(
+          'Unable to resolve a valid legacy categories.id for category_id. Please ensure main/sub category exists with matching name in categories.',
+        );
+      }
+
       // Insert main product with the generated UUID
       await connection.execute(
         `INSERT INTO products (
                     id, name, description, price, category_id, seller_id,
-                    image_url, is_veg, is_available, preparation_time
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, true, ?)`,
+                    image_url, is_veg, is_available, preparation_time,
+                    main_category_id, sub_category_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?)`,
         [
           productId,
           safe(product.name),
           safe(product.description),
           safe(product.price),
-          safe(product.category_id),
+          effectiveCategoryId,
           safe(sellerId),
           safe(product.image_url),
           safe(product.is_veg) ? 1 : 0,
           safe(product.preparation_time),
+          safe(product.main_category_id),
+          safe(product.sub_category_id),
         ],
       );
 
@@ -73,6 +120,19 @@ export class ProductRepositoryImpl implements ProductRepository {
       // Insert product metrics if provided
       if (product.metrics && product.metrics.length > 0) {
         await this.insertProductMetrics(connection, productId, product.metrics);
+      }
+
+      // Insert keyword associations
+      if (product.keyword_ids && product.keyword_ids.length > 0) {
+        const values = product.keyword_ids.map(() => '(?, ?)').join(',');
+        const params = product.keyword_ids.reduce(
+          (acc, kid) => [...acc, productId, kid],
+          [] as any[],
+        );
+        await connection.execute(
+          `INSERT IGNORE INTO product_keywords (product_id, keyword_id) VALUES ${values}`,
+          params,
+        );
       }
 
       await connection.commit();
@@ -432,20 +492,20 @@ export class ProductRepositoryImpl implements ProductRepository {
       let productQuery = `
         SELECT 
           p.*,
-          c.name as category_name
+          COALESCE(sc.name, mc.name) as category_name
           ${
             query
               ? ', MATCH(p.name, p.description) AGAINST(? IN BOOLEAN MODE) as relevance_score'
               : ''
           }
         FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN sub_categories sc ON sc.id = p.sub_category_id
+        LEFT JOIN main_categories mc ON mc.id = p.main_category_id
         WHERE p.is_available = 1
       `;
       let countQuery = `
         SELECT COUNT(*) as total
         FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.is_available = 1
       `;
       const params: (string | number | boolean)[] = [];
@@ -460,15 +520,36 @@ export class ProductRepositoryImpl implements ProductRepository {
         params.push(query + '*');
         countParams.push(query + '*');
       }
-      if (
-        filters.categoryId !== undefined &&
-        filters.categoryId !== null &&
-        filters.categoryId !== ''
-      ) {
+      // Back-compat: flat categoryId
+      if (filters.categoryId) {
         productQuery += ` AND p.category_id = ?`;
         countQuery += ` AND p.category_id = ?`;
         params.push(filters.categoryId);
         countParams.push(filters.categoryId);
+      }
+      // New: mainCategoryId => any category whose ancestor is main
+      if (filters.mainCategoryId) {
+        productQuery += ` AND (
+          p.category_id = ? OR
+          p.category_id IN (
+            SELECT c2.id FROM categories c2 WHERE c2.parent_id = ?
+          )
+        )`;
+        countQuery += ` AND (
+          p.category_id = ? OR
+          p.category_id IN (
+            SELECT c2.id FROM categories c2 WHERE c2.parent_id = ?
+          )
+        )`;
+        params.push(filters.mainCategoryId, filters.mainCategoryId);
+        countParams.push(filters.mainCategoryId, filters.mainCategoryId);
+      }
+      // New: subCategoryId => direct child of main
+      if (filters.subCategoryId) {
+        productQuery += ` AND p.category_id = ?`;
+        countQuery += ` AND p.category_id = ?`;
+        params.push(filters.subCategoryId);
+        countParams.push(filters.subCategoryId);
       }
       if (filters.isVeg !== undefined && filters.isVeg !== null) {
         productQuery += ` AND p.is_veg = ?`;
@@ -663,6 +744,7 @@ export class ProductRepositoryImpl implements ProductRepository {
         params.push(query + '*');
         countParams.push(query + '*');
       }
+      // Back-compat single categoryId
       if (
         filters.categoryId !== undefined &&
         filters.categoryId !== null &&
@@ -672,6 +754,52 @@ export class ProductRepositoryImpl implements ProductRepository {
         countQuery += ` AND p.category_id = ?`;
         params.push(filters.categoryId);
         countParams.push(filters.categoryId);
+      }
+      // Limit by seller if provided
+      if (filters.sellerId) {
+        productQuery += ` AND p.seller_id = ?`;
+        countQuery += ` AND p.seller_id = ?`;
+        params.push(filters.sellerId);
+        countParams.push(filters.sellerId);
+      }
+      // Main category → include products whose main matches OR whose sub belongs to the main
+      if (filters.mainCategoryId) {
+        productQuery += ` AND (p.main_category_id = ? OR p.sub_category_id IN (SELECT sc2.id FROM sub_categories sc2 WHERE sc2.main_category_id = ?))`;
+        countQuery += ` AND (p.main_category_id = ? OR p.sub_category_id IN (SELECT sc2.id FROM sub_categories sc2 WHERE sc2.main_category_id = ?))`;
+        params.push(filters.mainCategoryId, filters.mainCategoryId);
+        countParams.push(filters.mainCategoryId, filters.mainCategoryId);
+      }
+      // Sub category → direct match
+      if (filters.subCategoryId) {
+        productQuery += ` AND p.sub_category_id = ?`;
+        countQuery += ` AND p.sub_category_id = ?`;
+        params.push(filters.subCategoryId);
+        countParams.push(filters.subCategoryId);
+      }
+      // Keyword filters → require mapping in product_keywords
+      if (filters.keywordIds && filters.keywordIds.length) {
+        const placeholders = filters.keywordIds.map(() => '?').join(',');
+        productQuery += ` AND EXISTS (
+          SELECT 1 FROM product_keywords pk
+          WHERE pk.product_id = p.id AND pk.keyword_id IN (${placeholders})
+        )`;
+        countQuery += ` AND EXISTS (
+          SELECT 1 FROM product_keywords pk
+          WHERE pk.product_id = p.id AND pk.keyword_id IN (${placeholders})
+        )`;
+        params.push(...filters.keywordIds);
+        countParams.push(...filters.keywordIds);
+      } else if (filters.keywordId) {
+        productQuery += ` AND EXISTS (
+          SELECT 1 FROM product_keywords pk
+          WHERE pk.product_id = p.id AND pk.keyword_id = ?
+        )`;
+        countQuery += ` AND EXISTS (
+          SELECT 1 FROM product_keywords pk
+          WHERE pk.product_id = p.id AND pk.keyword_id = ?
+        )`;
+        params.push(filters.keywordId);
+        countParams.push(filters.keywordId);
       }
       if (filters.isVeg !== undefined && filters.isVeg !== null) {
         productQuery += ` AND p.is_veg = ?`;
@@ -737,6 +865,108 @@ export class ProductRepositoryImpl implements ProductRepository {
       return {items: products, total};
     } catch (error) {
       this.logger.error('Error searching:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async findSuppliersWithFilters(filters: SearchFilters): Promise<{
+    items: Array<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      email?: string;
+      company_name?: string;
+      total_products: number;
+    }>;
+    total: number;
+  }> {
+    const connection = await this.db.getConnection();
+    try {
+      const query = filters.query?.trim();
+      const page = filters.page && filters.page > 0 ? filters.page : 1;
+      const limit = filters.limit && filters.limit > 0 ? filters.limit : 20;
+      const offset = (page - 1) * limit;
+
+      let baseFilter = `FROM products p WHERE p.is_available = 1`;
+      const params: (string | number | boolean)[] = [];
+      const countParams: (string | number | boolean)[] = [];
+
+      if (query) {
+        baseFilter += ` AND MATCH(p.name, p.description) AGAINST(? IN BOOLEAN MODE)`;
+        params.push(query + '*');
+        countParams.push(query + '*');
+      }
+      if (
+        filters.categoryId !== undefined &&
+        filters.categoryId !== null &&
+        filters.categoryId !== ''
+      ) {
+        baseFilter += ` AND p.category_id = ?`;
+        params.push(filters.categoryId);
+        countParams.push(filters.categoryId);
+      }
+      if (filters.mainCategoryId) {
+        baseFilter += ` AND (p.main_category_id = ? OR p.sub_category_id IN (SELECT sc2.id FROM sub_categories sc2 WHERE sc2.main_category_id = ?))`;
+        params.push(filters.mainCategoryId, filters.mainCategoryId);
+        countParams.push(filters.mainCategoryId, filters.mainCategoryId);
+      }
+      if (filters.subCategoryId) {
+        baseFilter += ` AND p.sub_category_id = ?`;
+        params.push(filters.subCategoryId);
+        countParams.push(filters.subCategoryId);
+      }
+      if (filters.keywordIds && filters.keywordIds.length) {
+        const placeholders = filters.keywordIds.map(() => '?').join(',');
+        baseFilter += ` AND EXISTS (SELECT 1 FROM product_keywords pk WHERE pk.product_id = p.id AND pk.keyword_id IN (${placeholders}))`;
+        params.push(...filters.keywordIds);
+        countParams.push(...filters.keywordIds);
+      } else if (filters.keywordId) {
+        baseFilter += ` AND EXISTS (SELECT 1 FROM product_keywords pk WHERE pk.product_id = p.id AND pk.keyword_id = ?)`;
+        params.push(filters.keywordId);
+        countParams.push(filters.keywordId);
+      }
+      if (filters.isVeg !== undefined && filters.isVeg !== null) {
+        baseFilter += ` AND p.is_veg = ?`;
+        params.push(filters.isVeg ? 1 : 0);
+        countParams.push(filters.isVeg ? 1 : 0);
+      }
+      if (filters.minPrice !== undefined && filters.minPrice !== null) {
+        baseFilter += ` AND p.price >= ?`;
+        params.push(filters.minPrice);
+        countParams.push(filters.minPrice);
+      }
+      if (filters.maxPrice !== undefined && filters.maxPrice !== null) {
+        baseFilter += ` AND p.price <= ?`;
+        params.push(filters.maxPrice);
+        countParams.push(filters.maxPrice);
+      }
+
+      const suppliersQuery = `
+        SELECT u.id, u.first_name, u.last_name, u.email, u.company_name, COUNT(*) as total_products
+        FROM users u
+        JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
+        GROUP BY u.id, u.first_name, u.last_name, u.email, u.company_name
+        ORDER BY total_products DESC
+        LIMIT ${Number(limit)} OFFSET ${Number(offset)}
+      `;
+      const [rows] = await connection.execute(suppliersQuery, params);
+
+      const countQuery = `
+        SELECT COUNT(*) as total FROM (
+          SELECT u.id
+          FROM users u
+          JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
+          GROUP BY u.id
+        ) t
+      `;
+      const [countRows] = await connection.execute(countQuery, countParams);
+      const total = (countRows as any[])[0]?.total || 0;
+
+      return {items: rows as any[], total};
+    } catch (error) {
+      this.logger.error('Error fetching suppliers with filters:', error);
       throw error;
     } finally {
       connection.release();

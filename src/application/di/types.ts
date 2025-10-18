@@ -36,6 +36,10 @@ export const TYPES = {
 
   SearchController: Symbol.for('SearchController'),
 
+  // Keywords
+  KeywordController: Symbol.for('KeywordController'),
+  KeywordRepository: Symbol.for('KeywordRepository'),
+
   SupplierController: Symbol.for('SupplierController'),
   FormController: Symbol.for('FormController'),
 };

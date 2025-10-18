@@ -1,6 +1,11 @@
 export interface SearchFilters {
   query?: string;
   categoryId?: string;
+  mainCategoryId?: string;
+  subCategoryId?: string;
+  sellerId?: string;
+  keywordId?: string;
+  keywordIds?: string[];
   minPrice?: number;
   maxPrice?: number;
   isVeg?: boolean;

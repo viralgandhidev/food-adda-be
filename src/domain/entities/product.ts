@@ -13,6 +13,8 @@ export interface Product {
   description: string;
   price: number;
   category_id: string;
+  main_category_id?: string | null;
+  sub_category_id?: string | null;
   seller_id: string;
   image_url?: string;
   is_veg: boolean;
@@ -26,6 +28,7 @@ export interface Product {
   images?: ProductImage[];
   brand?: string;
   metrics?: ProductMetric[];
+  keyword_ids?: string[];
 }
 
 export interface CreateProductDTO {
@@ -33,11 +36,14 @@ export interface CreateProductDTO {
   description: string;
   price: number;
   category_id: string;
+  main_category_id?: string;
+  sub_category_id?: string;
   image_url?: string;
   is_veg: boolean;
   preparation_time: number;
   images?: CreateProductImageDTO[];
   metrics?: {key: string; value: string}[];
+  keyword_ids?: string[];
 }
 
 export interface UpdateProductDTO extends Partial<CreateProductDTO> {

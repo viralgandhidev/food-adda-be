@@ -16,17 +16,81 @@ export class CategoryRepositoryImpl implements CategoryRepository {
     const connection = await this.db.getConnection();
     try {
       const [rows] = await connection.execute(
-        `SELECT c.*, 
-          COUNT(p.id) as product_count
-        FROM categories c
-        LEFT JOIN products p ON c.id = p.category_id AND p.is_available = 1
-        WHERE c.is_active = 1
-        GROUP BY c.id
-        ORDER BY c.display_order ASC, c.name ASC`,
+        `SELECT * FROM (
+            SELECT 
+              mc.id,
+              mc.name,
+              mc.description,
+              mc.image_url,
+              mc.display_order,
+              mc.is_active,
+              0 AS product_count,
+              NULL AS parent_id
+            FROM main_categories mc
+            WHERE mc.is_active = 1
+            UNION ALL
+            SELECT 
+              sc.id,
+              sc.name,
+              sc.description,
+              sc.image_url,
+              sc.display_order,
+              sc.is_active,
+              0 AS product_count,
+              sc.main_category_id AS parent_id
+            FROM sub_categories sc
+            WHERE sc.is_active = 1
+         ) t
+         ORDER BY (parent_id IS NULL) DESC, display_order ASC, name ASC`,
       );
-      return rows as Category[];
+      return rows as any as Category[];
     } catch (error) {
       this.logger.error('Error fetching categories:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async findTree(): Promise<Array<Category & {children: Category[]}>> {
+    const connection = await this.db.getConnection();
+    try {
+      // Build from main_categories + sub_categories
+      const [mains] = await connection.execute(
+        `SELECT mc.id, mc.name, mc.description, mc.image_url, mc.display_order, mc.is_active
+         FROM main_categories mc WHERE mc.is_active = 1
+         ORDER BY mc.display_order ASC, mc.name ASC`,
+      );
+      const [subs] = await connection.execute(
+        `SELECT sc.id, sc.main_category_id as parent_id, sc.name, sc.description, sc.image_url,
+                sc.display_order, sc.is_active
+         FROM sub_categories sc WHERE sc.is_active = 1
+         ORDER BY sc.display_order ASC, sc.name ASC`,
+      );
+      const cats = (
+        [...((mains as any[]) || [])].map(m => ({
+          ...m,
+          parent_id: null,
+        })) as any[]
+      ).concat((subs as any[]) || []) as Category[];
+      const byId = new Map<string, Category & {children: Category[]}>();
+      const roots: Array<Category & {children: Category[]}> = [];
+      for (const c of cats) {
+        byId.set(c.id, {...c, children: []});
+      }
+      for (const c of cats) {
+        const node = byId.get(c.id)!;
+        if (c.parent_id) {
+          const parent = byId.get(c.parent_id);
+          if (parent) parent.children.push(node);
+          else roots.push(node); // fallback if parent missing
+        } else {
+          roots.push(node);
+        }
+      }
+      return roots;
+    } catch (error) {
+      this.logger.error('Error fetching category tree:', error);
       throw error;
     } finally {
       connection.release();

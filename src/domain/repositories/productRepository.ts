@@ -31,4 +31,19 @@ export interface ProductRepository {
   findWithFilters(
     filters: SearchFilters,
   ): Promise<{items: Product[]; total: number}>;
+
+  // New: find unique suppliers (users) whose products satisfy filters
+  findSuppliersWithFilters(
+    filters: SearchFilters,
+  ): Promise<{
+    items: Array<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      email?: string;
+      company_name?: string;
+      total_products: number;
+    }>;
+    total: number;
+  }>;
 }

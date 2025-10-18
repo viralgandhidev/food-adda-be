@@ -37,6 +37,16 @@ export class ProductController {
       this.authMiddleware.optionalAuthenticate,
       asyncHandler(this.getAllProducts.bind(this)),
     );
+    this.router.get(
+      '/suppliers',
+      this.authMiddleware.optionalAuthenticate,
+      asyncHandler(this.getSuppliers.bind(this)),
+    );
+    this.router.get(
+      '/seller/:sellerId',
+      this.authMiddleware.optionalAuthenticate,
+      asyncHandler(this.getProductsBySeller.bind(this)),
+    );
     // Register static route BEFORE param route to avoid shadowing
     this.router.get(
       '/top-viewed',
@@ -255,6 +265,14 @@ export class ProductController {
     const filters = {
       query: req.query.q as string,
       categoryId: req.query.categoryId as string,
+      mainCategoryId: req.query.mainCategoryId as string,
+      subCategoryId: req.query.subCategoryId as string,
+      keywordId: req.query.keywordId as string,
+      keywordIds: req.query.keywordIds
+        ? Array.isArray(req.query.keywordIds)
+          ? (req.query.keywordIds as string[])
+          : String(req.query.keywordIds).split(',').filter(Boolean)
+        : undefined,
       minPrice: req.query.minPrice
         ? parseFloat(req.query.minPrice as string)
         : undefined,
@@ -283,6 +301,86 @@ export class ProductController {
     res.status(200).json({
       success: true,
       data: sanitized,
+      meta: {
+        total: result.total,
+        page: filters.page,
+        limit: filters.limit,
+        totalPages: Math.ceil(result.total / (filters.limit || 20)),
+      },
+    });
+  }
+
+  private async getSuppliers(req: Request, res: Response): Promise<void> {
+    const filters = {
+      query: req.query.q as string,
+      categoryId: req.query.categoryId as string,
+      mainCategoryId: req.query.mainCategoryId as string,
+      subCategoryId: req.query.subCategoryId as string,
+      keywordId: req.query.keywordId as string,
+      keywordIds: req.query.keywordIds
+        ? Array.isArray(req.query.keywordIds)
+          ? (req.query.keywordIds as string[])
+          : String(req.query.keywordIds).split(',').filter(Boolean)
+        : undefined,
+      minPrice: req.query.minPrice
+        ? parseFloat(req.query.minPrice as string)
+        : undefined,
+      maxPrice: req.query.maxPrice
+        ? parseFloat(req.query.maxPrice as string)
+        : undefined,
+      isVeg:
+        req.query.isVeg !== undefined ? req.query.isVeg === 'true' : undefined,
+      sortBy: req.query.sortBy as 'price' | 'name' | 'preparation_time',
+      sortOrder: req.query.sortOrder as 'asc' | 'desc',
+      page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
+      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 20,
+    };
+
+    const result = await this.productRepository.findSuppliersWithFilters(
+      filters,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result.items,
+      meta: {
+        total: result.total,
+        page: filters.page,
+        limit: filters.limit,
+        totalPages: Math.ceil(result.total / (filters.limit || 20)),
+      },
+    });
+  }
+
+  private async getProductsBySeller(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    const filters = {
+      query: req.query.q as string,
+      mainCategoryId: req.query.mainCategoryId as string,
+      subCategoryId: req.query.subCategoryId as string,
+      keywordIds: req.query.keywordIds
+        ? Array.isArray(req.query.keywordIds)
+          ? (req.query.keywordIds as string[])
+          : String(req.query.keywordIds).split(',').filter(Boolean)
+        : undefined,
+      minPrice: req.query.minPrice
+        ? parseFloat(String(req.query.minPrice))
+        : undefined,
+      maxPrice: req.query.maxPrice
+        ? parseFloat(String(req.query.maxPrice))
+        : undefined,
+      page: req.query.page ? parseInt(String(req.query.page), 10) : 1,
+      limit: req.query.limit ? parseInt(String(req.query.limit), 10) : 20,
+      sellerId: req.params.sellerId,
+    };
+
+    const result = await this.productRepository.findWithFilters(filters as any);
+
+    res.status(200).json({
+      success: true,
+      data: result.items,
       meta: {
         total: result.total,
         page: filters.page,
