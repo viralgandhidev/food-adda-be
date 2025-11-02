@@ -15,8 +15,8 @@ type Plan = {
 };
 
 const PLANS: Record<string, Plan> = {
-  SILVER: {code: 'SILVER', label: 'Silver', amountPaise: 6000 * 100},
-  GOLD: {code: 'GOLD', label: 'Gold', amountPaise: 10000 * 100},
+  SILVER: {code: 'SILVER', label: 'Silver', amountPaise: 5900 * 100},
+  GOLD: {code: 'GOLD', label: 'Gold', amountPaise: 10620 * 100},
 };
 
 @injectable()
