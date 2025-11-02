@@ -121,12 +121,10 @@ export class ProductController {
         const sellerId = (req as any).user.id as string;
         const plan = await getActivePlanCode(sellerId);
         if (!plan) {
-          return res
-            .status(403)
-            .json({
-              success: false,
-              message: 'Subscription required to create products',
-            });
+          return res.status(403).json({
+            success: false,
+            message: 'Subscription required to create products',
+          });
         }
         // Parse order array for images
         let orderArr: number[] = [];
@@ -217,12 +215,10 @@ export class ProductController {
         const sellerId = (req as any).user.id as string;
         const plan = await getActivePlanCode(sellerId);
         if (!plan) {
-          return res
-            .status(403)
-            .json({
-              success: false,
-              message: 'Subscription required to update products',
-            });
+          return res.status(403).json({
+            success: false,
+            message: 'Subscription required to update products',
+          });
         }
         // Parse order array for images
         let orderArr: any[] = [];

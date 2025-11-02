@@ -81,7 +81,7 @@ export class FormController {
           contact_phone || null,
           userId,
           JSON.stringify(payload),
-          'SUBMITTED',
+          'APPROVED',
         ],
       );
       const submissionId = result.insertId as number;
