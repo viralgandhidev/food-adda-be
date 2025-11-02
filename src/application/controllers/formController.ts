@@ -7,6 +7,7 @@ import {asyncHandler} from '../utils/asyncHandler';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import {AuthMiddleware} from '../middleware/authenticate';
 
 @injectable()
 export class FormController {
@@ -15,6 +16,7 @@ export class FormController {
   constructor(
     @inject(TYPES.Logger) private logger: Logger,
     @inject(TYPES.DatabaseController) private db: DatabaseController,
+    @inject(TYPES.AuthMiddleware) private auth: AuthMiddleware,
   ) {
     this.router = Router();
     this.initializeRoutes();
@@ -36,12 +38,20 @@ export class FormController {
     // Accept many files from various fields
     this.router.post(
       '/submit',
+      this.auth.optionalAuthenticate,
       upload.any(),
       asyncHandler(this.submit.bind(this)),
     );
 
     // List submissions
     this.router.get('/list', asyncHandler(this.list.bind(this)));
+
+    // Latest submission status for current user
+    this.router.get(
+      '/my-status',
+      this.auth.authenticate,
+      asyncHandler(this.myStatus.bind(this)),
+    );
   }
 
   private async submit(req: Request, res: Response) {
@@ -61,14 +71,17 @@ export class FormController {
     }
     const connection = await this.db.getConnection();
     try {
+      const userId = (req as any).user?.id || null;
       const [result]: any = await connection.execute(
-        'INSERT INTO form_submissions (form_type, contact_name, contact_email, contact_phone, payload) VALUES (?,?,?,?,?)',
+        'INSERT INTO form_submissions (form_type, contact_name, contact_email, contact_phone, user_id, payload, status) VALUES (?,?,?,?,?,?,?)',
         [
           form_type,
           contact_name || null,
           contact_email || null,
           contact_phone || null,
+          userId,
           JSON.stringify(payload),
+          'SUBMITTED',
         ],
       );
       const submissionId = result.insertId as number;
@@ -157,6 +170,28 @@ export class FormController {
         data: submissions,
         meta: {total, page, limit, totalPages: Math.ceil(total / limit)},
       });
+    } finally {
+      connection.release();
+    }
+  }
+
+  private async myStatus(req: Request, res: Response) {
+    const userId = (req as any).user?.id as string | number | undefined;
+    if (!userId) {
+      return res.status(401).json({success: false});
+    }
+    const connection = await this.db.getConnection();
+    try {
+      const [rows] = await connection.execute(
+        `SELECT id, form_type, status, created_at
+         FROM form_submissions
+         WHERE user_id = ? AND form_type IN ('B2B','B2C')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [userId],
+      );
+      const latest = (rows as any[])[0] || null;
+      res.json({success: true, data: latest});
     } finally {
       connection.release();
     }

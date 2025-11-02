@@ -42,4 +42,7 @@ export const TYPES = {
 
   SupplierController: Symbol.for('SupplierController'),
   FormController: Symbol.for('FormController'),
+
+  // Subscription
+  SubscriptionController: Symbol.for('SubscriptionController'),
 };

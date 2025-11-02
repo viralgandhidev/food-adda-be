@@ -16,6 +16,7 @@ import {CategoryController} from './application/controllers/categoryController';
 import {SearchController} from './application/controllers/searchController';
 import {ProductController} from './application/controllers/productController';
 import {DatabaseController} from './application/utils/databaseController';
+import {SubscriptionController} from './application/controllers/subscriptionController';
 
 const container = new Container({defaultScope: 'Singleton'});
 
@@ -43,6 +44,10 @@ container
 container
   .bind<ProductController>(TYPES.ProductController)
   .to(ProductController)
+  .inSingletonScope();
+container
+  .bind<SubscriptionController>(TYPES.SubscriptionController)
+  .to(SubscriptionController)
   .inSingletonScope();
 
 // Services

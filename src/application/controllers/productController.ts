@@ -58,14 +58,24 @@ export class ProductController {
       this.authMiddleware.optionalAuthenticate,
       asyncHandler(this.getProductById.bind(this)),
     );
-    this.router.post('/:id/save', asyncHandler(this.saveProduct.bind(this)));
+    this.router.post(
+      '/:id/save',
+      this.authMiddleware.authenticate,
+      asyncHandler(this.saveProduct.bind(this)),
+    );
     this.router.delete(
       '/:id/save',
+      this.authMiddleware.authenticate,
       asyncHandler(this.unsaveProduct.bind(this)),
     );
-    this.router.get('/:id/saved', asyncHandler(this.isProductSaved.bind(this)));
+    this.router.get(
+      '/:id/saved',
+      this.authMiddleware.authenticate,
+      asyncHandler(this.isProductSaved.bind(this)),
+    );
     this.router.get(
       '/saved/list/all',
+      this.authMiddleware.authenticate,
       asyncHandler(this.getSavedProducts.bind(this)),
     );
 
@@ -81,6 +91,25 @@ export class ProductController {
     });
     const upload = multer({storage});
 
+    const getActivePlanCode = async (
+      userId?: string,
+    ): Promise<'SILVER' | 'GOLD' | null> => {
+      if (!userId) return null;
+      const conn = await this.db.getConnection();
+      try {
+        const [rows] = await conn.execute(
+          `SELECT plan_code FROM subscriptions
+           WHERE user_id = ? AND status = 'ACTIVE'
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId],
+        );
+        const rec = (rows as any[])[0];
+        return (rec?.plan_code as 'SILVER' | 'GOLD' | undefined) || null;
+      } finally {
+        conn.release();
+      }
+    };
+
     this.router.post(
       '/',
       this.authMiddleware.authenticate,
@@ -89,7 +118,16 @@ export class ProductController {
         {name: 'images', maxCount: 10},
       ]),
       asyncHandler(async (req: Request, res: Response) => {
-        const sellerId = (req as any).user.id;
+        const sellerId = (req as any).user.id as string;
+        const plan = await getActivePlanCode(sellerId);
+        if (!plan) {
+          return res
+            .status(403)
+            .json({
+              success: false,
+              message: 'Subscription required to create products',
+            });
+        }
         // Parse order array for images
         let orderArr: number[] = [];
         if (req.body.order) {
@@ -132,6 +170,16 @@ export class ProductController {
             images = req.body.images;
           }
         }
+        // Enforce plan-specific limits (Silver: up to 3 additional photos)
+        if (plan === 'SILVER') {
+          const additionalCount = Array.isArray(images) ? images.length : 0;
+          if (additionalCount > 3) {
+            return res.status(400).json({
+              success: false,
+              message: 'Silver plan allows up to 3 additional photos',
+            });
+          }
+        }
         // Handle metrics
         let metrics = [];
         if (req.body.metrics) {
@@ -166,7 +214,16 @@ export class ProductController {
         {name: 'new_images', maxCount: 10},
       ]),
       asyncHandler(async (req: Request, res: Response) => {
-        const sellerId = (req as any).user.id;
+        const sellerId = (req as any).user.id as string;
+        const plan = await getActivePlanCode(sellerId);
+        if (!plan) {
+          return res
+            .status(403)
+            .json({
+              success: false,
+              message: 'Subscription required to update products',
+            });
+        }
         // Parse order array for images
         let orderArr: any[] = [];
         if (req.body.order) {
@@ -203,6 +260,16 @@ export class ProductController {
             images.push({
               image_url: `/uploads/${newFiles[entry.fileIndex].filename}`,
               order: entry.order,
+            });
+          }
+        }
+        if (plan === 'SILVER') {
+          const additions = Array.isArray(newFiles) ? newFiles.length : 0;
+          // We cannot easily count existing images here; limit new uploads to at most 3 per request
+          if (additions > 3) {
+            return res.status(400).json({
+              success: false,
+              message: 'Silver plan allows up to 3 photos per update',
             });
           }
         }

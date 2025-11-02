@@ -24,9 +24,15 @@ export class CategoryRepositoryImpl implements CategoryRepository {
               mc.image_url,
               mc.display_order,
               mc.is_active,
-              0 AS product_count,
+              COALESCE(pm.cnt, 0) AS product_count,
               NULL AS parent_id
             FROM main_categories mc
+            LEFT JOIN (
+              SELECT main_category_id AS id, COUNT(*) AS cnt
+              FROM products p
+              WHERE p.is_available = 1
+              GROUP BY main_category_id
+            ) pm ON pm.id = mc.id
             WHERE mc.is_active = 1
             UNION ALL
             SELECT 
@@ -36,9 +42,15 @@ export class CategoryRepositoryImpl implements CategoryRepository {
               sc.image_url,
               sc.display_order,
               sc.is_active,
-              0 AS product_count,
+              COALESCE(ps.cnt, 0) AS product_count,
               sc.main_category_id AS parent_id
             FROM sub_categories sc
+            LEFT JOIN (
+              SELECT sub_category_id AS id, COUNT(*) AS cnt
+              FROM products p
+              WHERE p.is_available = 1
+              GROUP BY sub_category_id
+            ) ps ON ps.id = sc.id
             WHERE sc.is_active = 1
          ) t
          ORDER BY (parent_id IS NULL) DESC, display_order ASC, name ASC`,
@@ -57,14 +69,27 @@ export class CategoryRepositoryImpl implements CategoryRepository {
     try {
       // Build from main_categories + sub_categories
       const [mains] = await connection.execute(
-        `SELECT mc.id, mc.name, mc.description, mc.image_url, mc.display_order, mc.is_active
-         FROM main_categories mc WHERE mc.is_active = 1
+        `SELECT mc.id, mc.name, mc.description, mc.image_url, mc.display_order, mc.is_active,
+                COALESCE(pm.cnt, 0) AS product_count
+         FROM main_categories mc
+         LEFT JOIN (
+           SELECT main_category_id AS id, COUNT(*) AS cnt
+           FROM products p WHERE p.is_available = 1
+           GROUP BY main_category_id
+         ) pm ON pm.id = mc.id
+         WHERE mc.is_active = 1
          ORDER BY mc.display_order ASC, mc.name ASC`,
       );
       const [subs] = await connection.execute(
         `SELECT sc.id, sc.main_category_id as parent_id, sc.name, sc.description, sc.image_url,
-                sc.display_order, sc.is_active
-         FROM sub_categories sc WHERE sc.is_active = 1
+                sc.display_order, sc.is_active, COALESCE(ps.cnt, 0) AS product_count
+         FROM sub_categories sc
+         LEFT JOIN (
+           SELECT sub_category_id AS id, COUNT(*) AS cnt
+           FROM products p WHERE p.is_available = 1
+           GROUP BY sub_category_id
+         ) ps ON ps.id = sc.id
+         WHERE sc.is_active = 1
          ORDER BY sc.display_order ASC, sc.name ASC`,
       );
       const cats = (

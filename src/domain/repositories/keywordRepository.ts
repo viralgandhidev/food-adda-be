@@ -6,4 +6,5 @@ export interface KeywordRepository {
     mainCategoryId: string,
     subCategoryId?: string,
   ): Promise<Keyword[]>;
+  findByQuery(q: string, limit: number): Promise<Keyword[]>;
 }

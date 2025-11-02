@@ -21,6 +21,7 @@ export class KeywordController {
   private initializeRoutes(): void {
     this.router.get('/', asyncHandler(this.getKeywords.bind(this)));
     this.router.get('/all', asyncHandler(this.getAllKeywords.bind(this)));
+    this.router.get('/search', asyncHandler(this.searchKeywords.bind(this)));
   }
 
   private async getKeywords(req: Request, res: Response): Promise<void> {
@@ -46,6 +47,20 @@ export class KeywordController {
     res
       .status(200)
       .json({success: true, data: items, meta: {total: items.length}});
+  }
+
+  private async searchKeywords(req: Request, res: Response): Promise<void> {
+    const q = (req.query.q as string) || '';
+    const limit = Math.min(
+      20,
+      parseInt((req.query.limit as string) || '5', 10) || 5,
+    );
+    if (!q || q.trim().length < 2) {
+      res.status(200).json({success: true, data: []});
+      return;
+    }
+    const items = await this.keywordRepository.findByQuery(q.trim(), limit);
+    res.status(200).json({success: true, data: items});
   }
 
   public getRouter(): Router {

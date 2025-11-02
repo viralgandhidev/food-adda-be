@@ -48,4 +48,26 @@ export class KeywordRepositoryImpl implements KeywordRepository {
       connection.release();
     }
   }
+
+  async findByQuery(q: string, limit: number): Promise<Keyword[]> {
+    const connection = await this.db.getConnection();
+    try {
+      const like = `%${q}%`;
+      const lim = Math.max(1, Math.min(20, limit));
+      // Some MySQL setups reject bound parameters for LIMIT; inline sanitized integer
+      const [rows] = await connection.query(
+        `SELECT id, name FROM keywords
+         WHERE is_active = 1 AND name LIKE ?
+         ORDER BY name ASC
+         LIMIT ${lim}`,
+        [like],
+      );
+      return rows as Keyword[];
+    } catch (error) {
+      this.logger.error('Error searching keywords:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 }

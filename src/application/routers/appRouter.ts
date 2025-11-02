@@ -8,6 +8,7 @@ import {SearchController} from '../controllers/searchController';
 import {SupplierController} from '../controllers/supplierController';
 import {FormController} from '../controllers/formController';
 import {KeywordController} from '../controllers/keywordController';
+import {SubscriptionController} from '../controllers/subscriptionController';
 
 @injectable()
 export class AppRouter {
@@ -24,6 +25,8 @@ export class AppRouter {
     private formController: FormController,
     @inject(TYPES.KeywordController)
     private keywordController: KeywordController,
+    @inject(TYPES.SubscriptionController)
+    private subscriptionController: SubscriptionController,
   ) {}
 
   public registerRoutes(app: Application): void {
@@ -50,5 +53,11 @@ export class AppRouter {
 
     // Keywords routes
     app.use(`${apiRouter}/keywords`, this.keywordController.getRouter());
+
+    // Subscriptions routes
+    app.use(
+      `${apiRouter}/subscriptions`,
+      this.subscriptionController.getRouter(),
+    );
   }
 }

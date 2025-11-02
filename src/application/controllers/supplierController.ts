@@ -96,6 +96,25 @@ export class SupplierController {
     );
   }
 
+  private async getActivePlanCode(
+    userId?: string,
+  ): Promise<'SILVER' | 'GOLD' | null> {
+    if (!userId) return null;
+    const connection = await this.db.getConnection();
+    try {
+      const [rows] = await connection.execute(
+        `SELECT plan_code FROM subscriptions
+         WHERE user_id = ? AND status = 'ACTIVE'
+         ORDER BY created_at DESC LIMIT 1`,
+        [userId],
+      );
+      const rec = (rows as any[])[0];
+      return (rec?.plan_code as 'SILVER' | 'GOLD' | undefined) || null;
+    } finally {
+      connection.release();
+    }
+  }
+
   private async getSupplierDetails(req: Request, res: Response): Promise<void> {
     const {supplierId} = req.params;
     const user = await this.userRepository.findById(supplierId);
@@ -124,12 +143,15 @@ export class SupplierController {
     }
     // Exclude password_hash from response
     const {password_hash, ...supplierData} = user as any;
-    const isAuthed = Boolean((req as any).user?.id);
-    if (!isAuthed) {
-      // mask contact details for unauthenticated users
+    const viewerId = (req as any).user?.id as string | undefined;
+    const plan = await this.getActivePlanCode(viewerId);
+    if (!plan) {
       (supplierData as any).email = null;
       (supplierData as any).phone_number = null;
-    }
+    } else if (plan === 'SILVER') {
+      // Silver: email only
+      (supplierData as any).phone_number = null;
+    } // Gold: show both
     res.json({success: true, data: supplierData});
   }
 

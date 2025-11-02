@@ -23,4 +23,10 @@ export default {
 
   // API
   apiPrefix: '/api/v1',
+
+  // Payments
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+  },
 };

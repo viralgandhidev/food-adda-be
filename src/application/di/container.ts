@@ -26,6 +26,7 @@ import {FormController} from '../controllers/formController';
 import {KeywordController} from '../controllers/keywordController';
 import {KeywordRepository} from '../../domain/repositories/keywordRepository';
 import {KeywordRepositoryImpl} from '../../infrastructure/repositories/keywordRepositoryImpl';
+import {SubscriptionController} from '../controllers/subscriptionController';
 
 const container = new Container({defaultScope: 'Singleton'});
 
@@ -115,6 +116,12 @@ container
 container
   .bind<FormController>(TYPES.FormController)
   .to(FormController)
+  .inSingletonScope();
+
+// Subscription Module
+container
+  .bind<SubscriptionController>(TYPES.SubscriptionController)
+  .to(SubscriptionController)
   .inSingletonScope();
 
 export {container};
