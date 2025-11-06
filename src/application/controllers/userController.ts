@@ -83,6 +83,29 @@ export class UserController {
     });
     const upload = multer({storage});
 
+    this.router.get(
+      '/me',
+      this.authMiddleware.authenticate,
+      asyncHandler(async (req: Request, res: Response) => {
+        const anyReq = req as any;
+        const userId = anyReq.user?.id;
+        if (!userId) {
+          return res
+            .status(401)
+            .json({success: false, message: 'Unauthorized'});
+        }
+        const user = await this.userService.getUserById(userId);
+        if (!user) {
+          return res
+            .status(404)
+            .json({success: false, message: 'User not found'});
+        }
+        // Exclude password_hash from response
+        const {password_hash, ...userData} = user as any;
+        res.json({success: true, data: userData});
+      }),
+    );
+
     this.router.put(
       '/profile',
       this.authMiddleware.authenticate,

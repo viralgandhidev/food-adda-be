@@ -94,6 +94,16 @@ export class UserService {
     return {user, token};
   }
 
+  public async getUserById(userId: string): Promise<User | null> {
+    try {
+      const user = await this.userRepository.findById(userId);
+      return user;
+    } catch (error) {
+      this.logger.error('Error getting user by id:', error);
+      throw error;
+    }
+  }
+
   public async updateProfile(
     userId: string,
     updateData: Partial<User>,

@@ -393,6 +393,7 @@ export class ProductController {
         : undefined,
       isVeg:
         req.query.isVeg !== undefined ? req.query.isVeg === 'true' : undefined,
+      formType: req.query.formType as string | undefined,
       sortBy: req.query.sortBy as 'price' | 'name' | 'preparation_time',
       sortOrder: req.query.sortOrder as 'asc' | 'desc',
       page: req.query.page ? parseInt(req.query.page as string, 10) : 1,

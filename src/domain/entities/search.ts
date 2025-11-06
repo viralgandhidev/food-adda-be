@@ -9,6 +9,7 @@ export interface SearchFilters {
   minPrice?: number;
   maxPrice?: number;
   isVeg?: boolean;
+  formType?: string;
   sortBy?: 'price' | 'name' | 'preparation_time';
   sortOrder?: 'asc' | 'desc';
   page?: number;

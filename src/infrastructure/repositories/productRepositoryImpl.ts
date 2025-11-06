@@ -943,9 +943,18 @@ export class ProductRepositoryImpl implements ProductRepository {
         countParams.push(filters.maxPrice);
       }
 
+      // Filter by form type if provided (B2B, B2C, etc.)
+      let formTypeJoin = '';
+      if (filters.formType) {
+        formTypeJoin = `INNER JOIN form_submissions fs ON fs.user_id = u.id AND fs.form_type = ? AND fs.status = 'APPROVED'`;
+        params.push(filters.formType);
+        countParams.push(filters.formType);
+      }
+
       const suppliersQuery = `
         SELECT u.id, u.first_name, u.last_name, u.email, u.company_name, COUNT(*) as total_products
         FROM users u
+        ${formTypeJoin}
         JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
         GROUP BY u.id, u.first_name, u.last_name, u.email, u.company_name
         ORDER BY total_products DESC
@@ -957,6 +966,7 @@ export class ProductRepositoryImpl implements ProductRepository {
         SELECT COUNT(*) as total FROM (
           SELECT u.id
           FROM users u
+          ${formTypeJoin}
           JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
           GROUP BY u.id
         ) t

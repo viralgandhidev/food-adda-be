@@ -57,7 +57,7 @@ export class SubscriptionController {
     try {
       const [rows] = await conn.execute(
         `SELECT status FROM form_submissions
-         WHERE user_id = ? AND form_type IN ('B2B','B2C')
+         WHERE user_id = ? AND form_type IN ('B2B','B2C','HORECA')
          ORDER BY created_at DESC LIMIT 1`,
         [userId],
       );
