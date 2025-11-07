@@ -943,34 +943,52 @@ export class ProductRepositoryImpl implements ProductRepository {
         countParams.push(filters.maxPrice);
       }
 
-      // Filter by form type if provided (B2B, B2C, etc.)
-      let formTypeJoin = '';
+      // Build queries. If formType is provided, include users with approved form submissions
+      // even when they have zero products (LEFT JOIN to products).
+      let suppliersQuery = '';
+      let countQuery = '';
       if (filters.formType) {
-        formTypeJoin = `INNER JOIN form_submissions fs ON fs.user_id = u.id AND fs.form_type = ? AND fs.status = 'APPROVED'`;
+        const formTypeJoin = `INNER JOIN form_submissions fs ON fs.user_id = u.id AND fs.form_type = ? AND fs.status = 'APPROVED'`;
         params.push(filters.formType);
         countParams.push(filters.formType);
-      }
-
-      const suppliersQuery = `
-        SELECT u.id, u.first_name, u.last_name, u.email, u.company_name, COUNT(*) as total_products
-        FROM users u
-        ${formTypeJoin}
-        JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
-        GROUP BY u.id, u.first_name, u.last_name, u.email, u.company_name
-        ORDER BY total_products DESC
-        LIMIT ${Number(limit)} OFFSET ${Number(offset)}
-      `;
-      const [rows] = await connection.execute(suppliersQuery, params);
-
-      const countQuery = `
-        SELECT COUNT(*) as total FROM (
-          SELECT u.id
+        suppliersQuery = `
+          SELECT u.id, u.first_name, u.last_name, u.email, u.company_name, COALESCE(COUNT(fp.seller_id), 0) as total_products
           FROM users u
           ${formTypeJoin}
+          LEFT JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
+          GROUP BY u.id, u.first_name, u.last_name, u.email, u.company_name
+          ORDER BY total_products DESC
+          LIMIT ${Number(limit)} OFFSET ${Number(offset)}
+        `;
+        countQuery = `
+          SELECT COUNT(*) as total FROM (
+            SELECT u.id
+            FROM users u
+            ${formTypeJoin}
+            LEFT JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
+            GROUP BY u.id
+          ) t
+        `;
+      } else {
+        suppliersQuery = `
+          SELECT u.id, u.first_name, u.last_name, u.email, u.company_name, COUNT(*) as total_products
+          FROM users u
           JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
-          GROUP BY u.id
-        ) t
-      `;
+          GROUP BY u.id, u.first_name, u.last_name, u.email, u.company_name
+          ORDER BY total_products DESC
+          LIMIT ${Number(limit)} OFFSET ${Number(offset)}
+        `;
+        countQuery = `
+          SELECT COUNT(*) as total FROM (
+            SELECT u.id
+            FROM users u
+            JOIN (${`SELECT p.seller_id as seller_id ${baseFilter}`}) fp ON fp.seller_id = u.id
+            GROUP BY u.id
+          ) t
+        `;
+      }
+      const [rows] = await connection.execute(suppliersQuery, params);
+
       const [countRows] = await connection.execute(countQuery, countParams);
       const total = (countRows as any[])[0]?.total || 0;
 

@@ -28,5 +28,8 @@ export default {
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID || '',
     keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+    silverPlanId: process.env.RAZORPAY_SILVER_PLAN_ID || '',
+    goldPlanId: process.env.RAZORPAY_GOLD_PLAN_ID || '',
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
 };
