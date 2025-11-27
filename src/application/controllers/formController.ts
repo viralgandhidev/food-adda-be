@@ -8,6 +8,8 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import {AuthMiddleware} from '../middleware/authenticate';
+import nodemailer from 'nodemailer';
+import config from '../config';
 
 @injectable()
 export class FormController {
@@ -51,6 +53,12 @@ export class FormController {
       '/my-status',
       this.auth.authenticate,
       asyncHandler(this.myStatus.bind(this)),
+    );
+
+    // Contact form (phone number submission)
+    this.router.post(
+      '/contact',
+      asyncHandler(this.contact.bind(this)),
     );
   }
 
@@ -194,6 +202,47 @@ export class FormController {
       res.json({success: true, data: latest});
     } finally {
       connection.release();
+    }
+  }
+
+  private async contact(req: Request, res: Response) {
+    const {phone} = req.body || {};
+    if (!phone || !phone.trim()) {
+      return res
+        .status(400)
+        .json({success: false, message: 'Phone number is required'});
+    }
+
+    try {
+      // Create email transporter
+      const transporter = nodemailer.createTransport({
+        host: config.email.host,
+        port: config.email.port,
+        secure: config.email.secure,
+        auth: {
+          user: config.email.user,
+          pass: config.email.password,
+        },
+      });
+
+      // Send email
+      await transporter.sendMail({
+        from: config.email.user,
+        to: config.email.to,
+        subject: 'New Contact Request - FoodAdda',
+        html: `
+          <h2>New Contact Request</h2>
+          <p><strong>Phone Number:</strong> ${phone}</p>
+          <p><strong>Submitted At:</strong> ${new Date().toLocaleString()}</p>
+        `,
+        text: `New Contact Request\n\nPhone Number: ${phone}\nSubmitted At: ${new Date().toLocaleString()}`,
+      });
+
+      this.logger.info(`Contact form submitted: ${phone}`);
+      res.status(200).json({success: true, message: 'Contact request submitted successfully'});
+    } catch (error) {
+      this.logger.error('Error sending contact email', error);
+      res.status(500).json({success: false, message: 'Failed to submit contact request'});
     }
   }
 }
