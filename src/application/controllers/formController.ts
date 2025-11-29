@@ -56,10 +56,7 @@ export class FormController {
     );
 
     // Contact form (phone number submission)
-    this.router.post(
-      '/contact',
-      asyncHandler(this.contact.bind(this)),
-    );
+    this.router.post('/contact', asyncHandler(this.contact.bind(this)));
   }
 
   private async submit(req: Request, res: Response) {
@@ -213,15 +210,30 @@ export class FormController {
         .json({success: false, message: 'Phone number is required'});
     }
 
+    // Validate email configuration
+    if (!config.email.user || !config.email.password) {
+      this.logger.error(
+        'Email configuration is missing. Please check your .env file. SMTP_USER and SMTP_PASSWORD are required.',
+      );
+      return res.status(500).json({
+        success: false,
+        message: 'Email service is not configured. Please contact support.',
+      });
+    }
+
     try {
-      // Create email transporter
+      // Create email transporter with Gmail-specific settings
       const transporter = nodemailer.createTransport({
         host: config.email.host,
         port: config.email.port,
-        secure: config.email.secure,
+        secure: config.email.secure, // true for 465, false for other ports
         auth: {
           user: config.email.user,
           pass: config.email.password,
+        },
+        tls: {
+          // Do not fail on invalid certs (useful for local testing)
+          rejectUnauthorized: false,
         },
       });
 
@@ -239,10 +251,32 @@ export class FormController {
       });
 
       this.logger.info(`Contact form submitted: ${phone}`);
-      res.status(200).json({success: true, message: 'Contact request submitted successfully'});
+      res.status(200).json({
+        success: true,
+        message: 'Contact request submitted successfully',
+      });
     } catch (error) {
       this.logger.error('Error sending contact email', error);
-      res.status(500).json({success: false, message: 'Failed to submit contact request'});
+
+      // Provide more helpful error messages
+      let errorMessage = 'Failed to submit contact request';
+      if (error instanceof Error) {
+        if (
+          error.message.includes('EAUTH') ||
+          error.message.includes('credentials')
+        ) {
+          errorMessage =
+            'Email authentication failed. Please check SMTP credentials in server configuration.';
+        } else if (
+          error.message.includes('ETIMEDOUT') ||
+          error.message.includes('ECONNREFUSED')
+        ) {
+          errorMessage =
+            'Unable to connect to email server. Please check SMTP settings.';
+        }
+      }
+
+      res.status(500).json({success: false, message: errorMessage});
     }
   }
 }
