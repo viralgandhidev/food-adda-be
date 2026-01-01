@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Database Migration Runner
- * 
+ *
  * This script runs all SQL migration files in order from the migrations directory.
  * It tracks which migrations have been run using a migrations_log table.
  */
@@ -14,7 +14,28 @@ import * as dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
+// In production (compiled), __dirname points to build/infrastructure/database
+// In development (ts-node), __dirname points to src/infrastructure/database
+// We need to resolve to src/infrastructure/database/migrations from the app root
+const getMigrationsDir = (): string => {
+  // If running from compiled code, go up to build, then to src
+  if (__dirname.includes('build')) {
+    return path.join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'src',
+      'infrastructure',
+      'database',
+      'migrations',
+    );
+  }
+  // If running from source (ts-node), use relative path
+  return path.join(__dirname, 'migrations');
+};
+
+const MIGRATIONS_DIR = getMigrationsDir();
 
 interface MigrationRecord {
   id: number;
@@ -32,7 +53,7 @@ class MigrationRunner {
       user: string;
       password: string;
       database: string;
-    }
+    },
   ) {}
 
   async connect(): Promise<void> {
@@ -80,14 +101,15 @@ class MigrationRunner {
     }
 
     const [rows] = await this.connection.query<mysql.RowDataPacket[]>(
-      'SELECT filename FROM migrations_log ORDER BY id'
+      'SELECT filename FROM migrations_log ORDER BY id',
     );
 
     return new Set(rows.map(row => row.filename));
   }
 
   async getMigrationFiles(): Promise<string[]> {
-    const files = fs.readdirSync(MIGRATIONS_DIR)
+    const files = fs
+      .readdirSync(MIGRATIONS_DIR)
       .filter(file => file.endsWith('.sql'))
       .sort(); // Sort alphabetically (files should be numbered like 001_, 002_, etc.)
 
@@ -103,14 +125,14 @@ class MigrationRunner {
 
     try {
       console.log(`  → Executing: ${basename}`);
-      
+
       // Execute the SQL (may contain multiple statements)
       await this.connection.query(sql);
 
       // Log the migration
       await this.connection.query(
         'INSERT INTO migrations_log (filename) VALUES (?)',
-        [basename]
+        [basename],
       );
 
       console.log(`  ✓ Completed: ${basename}`);
@@ -153,7 +175,9 @@ class MigrationRunner {
         executedCount++;
       }
 
-      console.log(`\n✓ Migration complete! Executed ${executedCount} new migration(s)`);
+      console.log(
+        `\n✓ Migration complete! Executed ${executedCount} new migration(s)`,
+      );
     } catch (error) {
       console.error('\n✗ Migration failed:', error);
       process.exit(1);
@@ -202,4 +226,3 @@ if (require.main === module) {
 }
 
 export default MigrationRunner;
-
