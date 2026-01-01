@@ -15,7 +15,7 @@ type Plan = {
 };
 
 const PLANS: Record<string, Plan> = {
-  SILVER: {code: 'SILVER', label: 'Silver', amountPaise: 5900 * 100},
+  SILVER: {code: 'SILVER', label: 'Silver', amountPaise: 5999 * 100},
   GOLD: {code: 'GOLD', label: 'Gold', amountPaise: 10620 * 100},
 };
 
@@ -207,7 +207,7 @@ export class SubscriptionController {
         .status(500)
         .json({success: false, message: 'Payment is not configured'});
     }
-    // Single active/pending check
+    // Check for existing subscriptions - allow retry for PENDING_PAYMENT
     {
       const conn = await this.db.getConnection();
       try {
@@ -217,10 +217,22 @@ export class SubscriptionController {
            ORDER BY created_at DESC LIMIT 1`,
           [userId],
         );
-        if ((rows as any[])[0]) {
-          return res
-            .status(409)
-            .json({success: false, code: 'ALREADY_SUBSCRIBED'});
+        const existing = (rows as any[])[0];
+        if (existing) {
+          // Allow retrying payment for PENDING_PAYMENT subscriptions
+          if (existing.status === 'PENDING_PAYMENT') {
+            // Cancel the existing pending subscription to allow creating a new one
+            // This is okay since it's still pending and hasn't been paid
+            await conn.execute(
+              `UPDATE subscriptions SET status='CANCELLED', updated_at=NOW() WHERE id = ?`,
+              [existing.id],
+            );
+          } else if (existing.status === 'ACTIVE') {
+            // Don't allow creating new subscription if one is already ACTIVE
+            return res
+              .status(409)
+              .json({success: false, code: 'ALREADY_SUBSCRIBED'});
+          }
         }
       } finally {
         conn.release();

@@ -27,6 +27,7 @@ import {KeywordController} from '../controllers/keywordController';
 import {KeywordRepository} from '../../domain/repositories/keywordRepository';
 import {KeywordRepositoryImpl} from '../../infrastructure/repositories/keywordRepositoryImpl';
 import {SubscriptionController} from '../controllers/subscriptionController';
+import {ChatController} from '../controllers/chatController';
 
 const container = new Container({defaultScope: 'Singleton'});
 
@@ -122,6 +123,12 @@ container
 container
   .bind<SubscriptionController>(TYPES.SubscriptionController)
   .to(SubscriptionController)
+  .inSingletonScope();
+
+// Chat Module
+container
+  .bind<ChatController>(TYPES.ChatController)
+  .to(ChatController)
   .inSingletonScope();
 
 export {container};

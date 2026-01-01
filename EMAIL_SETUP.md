@@ -150,3 +150,53 @@ If you're using systemd or another process manager, set these in your service fi
 - Check spam/junk folder
 - Verify the `CONTACT_EMAIL` is correct
 - Check backend logs for error messages
+
+
+```bash
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_SECURE=false
+export SMTP_USER=sfoodadda@gmail.com
+export SMTP_PASSWORD=uaobmxpsjszvkwzl
+export CONTACT_EMAIL=sfoodadda@gmail.com
+docker-compose up -d
+```
+
+**Option 3: Set in system environment (systemd, etc.)**
+If you're using systemd or another process manager, set these in your service file.
+
+#### After Setting Variables
+
+1. Rebuild and restart the backend container:
+
+   ```bash
+   docker-compose down
+   docker-compose up -d --build backend
+   ```
+
+2. Verify the environment variables are loaded:
+
+   ```bash
+   docker-compose exec backend env | grep SMTP
+   ```
+
+3. Test the contact form on your production site and check `sfoodadda@gmail.com` for the email.
+
+## Troubleshooting
+
+### Authentication Error
+
+- Make sure you're using an App Password, not your regular Gmail password
+- Verify that 2-Step Verification is enabled on your Google Account
+
+### Connection Timeout
+
+- Check your firewall settings
+- Ensure port 587 is not blocked
+- Try using port 465 with `SMTP_SECURE=true` instead
+
+### Email Not Received
+
+- Check spam/junk folder
+- Verify the `CONTACT_EMAIL` is correct
+- Check backend logs for error messages

@@ -68,8 +68,14 @@ export class App {
       next();
     });
     // Serve uploaded images statically before rate limiting
+    // Add CORS headers for static files
     this.app.use(
       '/uploads',
+      (req, res, next) => {
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET');
+        next();
+      },
       express.static(path.join(__dirname, '../uploads')),
     );
 

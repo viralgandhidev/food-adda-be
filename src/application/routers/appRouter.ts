@@ -9,6 +9,7 @@ import {SupplierController} from '../controllers/supplierController';
 import {FormController} from '../controllers/formController';
 import {KeywordController} from '../controllers/keywordController';
 import {SubscriptionController} from '../controllers/subscriptionController';
+import {ChatController} from '../controllers/chatController';
 
 @injectable()
 export class AppRouter {
@@ -27,6 +28,7 @@ export class AppRouter {
     private keywordController: KeywordController,
     @inject(TYPES.SubscriptionController)
     private subscriptionController: SubscriptionController,
+    @inject(TYPES.ChatController) private chatController: ChatController,
   ) {}
 
   public registerRoutes(app: Application): void {
@@ -59,5 +61,8 @@ export class AppRouter {
       `${apiRouter}/subscriptions`,
       this.subscriptionController.getRouter(),
     );
+
+    // Chat routes
+    app.use(`${apiRouter}/chat`, this.chatController.getRouter());
   }
 }

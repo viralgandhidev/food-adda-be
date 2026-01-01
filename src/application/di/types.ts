@@ -45,4 +45,7 @@ export const TYPES = {
 
   // Subscription
   SubscriptionController: Symbol.for('SubscriptionController'),
+
+  // Chat
+  ChatController: Symbol.for('ChatController'),
 };
