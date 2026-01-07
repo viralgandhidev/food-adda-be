@@ -222,6 +222,10 @@ export class ProductRepositoryImpl implements ProductRepository {
   async findBySeller(sellerId: string): Promise<Product[]> {
     const connection = await this.db.getConnection();
     try {
+      // Ensure sellerId is a string for comparison (remove any whitespace)
+      const sellerIdStr = String(sellerId).trim();
+      this.logger.info(`Querying products for seller_id: "${sellerIdStr}"`);
+      
       const [rows] = await connection.execute(
         `SELECT p.*, 
                     c.name as category_name,
@@ -232,8 +236,22 @@ export class ProductRepositoryImpl implements ProductRepository {
                 LEFT JOIN users u ON p.seller_id = u.id
                 WHERE p.seller_id = ?
                 ORDER BY p.name ASC`,
-        [sellerId],
+        [sellerIdStr],
       );
+      const productCount = (rows as any[]).length;
+      this.logger.info(`Found ${productCount} products for seller_id "${sellerIdStr}"`);
+      
+      // If no products found, log some debug info
+      if (productCount === 0) {
+        const [allSellers] = await connection.execute(
+          `SELECT DISTINCT seller_id, COUNT(*) as product_count 
+           FROM products 
+           GROUP BY seller_id 
+           LIMIT 5`
+        );
+        const sampleSellers = (allSellers as any[]).map((r: any) => `"${r.seller_id}" (${r.product_count} products)`).join(', ');
+        this.logger.warn(`No products found for seller_id "${sellerIdStr}". Sample seller_ids in DB: ${sampleSellers}`);
+      }
 
       // Fetch images for all products
       const products = rows as Product[];

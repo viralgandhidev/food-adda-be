@@ -624,8 +624,22 @@ export class ProductController {
   }
 
   private async getSellerProducts(req: Request, res: Response): Promise<void> {
-    const sellerId = (req as any).user.id;
+    const user = (req as any).user;
+    if (!user || !user.id) {
+      this.logger.error('getSellerProducts: No user or user.id in request');
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - user not found in token',
+      });
+      return;
+    }
+    
+    const sellerId = String(user.id).trim();
+    this.logger.info(`Fetching products for seller from token. User: id=${user.id}, email=${user.email}, user_type=${user.user_type}, sellerId=${sellerId}`);
+    
     const products = await this.productRepository.findBySeller(sellerId);
+    this.logger.info(`Returning ${products.length} products for seller ${sellerId}`);
+    
     res.status(200).json({
       success: true,
       data: products,
